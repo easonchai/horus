@@ -1,0 +1,19 @@
+{
+  "protocols": [
+    {
+      "name": "UniswapV3",
+      "chains": {
+        "84532": {
+          "nonfungiblePositionManager": "0x27F971cb582BF9E50F397e4d29a5C7A34f11faA2",
+          "factory": "0x0227628f3F023bb0B980b67D528571c95c6DaC1c",
+          "router": "0xE592427A0AEce92De3Edee1F18E0157C05861564"
+        }
+      },
+      "abis": {
+        "nonfungiblePositionManager": "uniswap_v3_nft_manager.json",
+        "factory": "uniswap_v3_factory.json",
+        "pool": "uniswap_v3_pool.json"
+      }
+    }
+  ]
+}
