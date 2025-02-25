@@ -8,6 +8,24 @@
           "USDT": "5000000000",
           "positions": [
             {
+              "protocol": "Beefy",
+              "symbol": "beefyUSDC-USDT",
+              "tokenId": "1",
+              "shares": "1000000000000000000"
+            },
+            {
+              "protocol": "Beefy",
+              "symbol": "beefyWBTC-EIGEN",
+              "tokenId": "2",
+              "shares": "1000000000000000000"
+            },
+            {
+              "protocol": "Beefy",
+              "symbol": "beefyUSDC-EIGEN",
+              "tokenId": "3",
+              "shares": "1000000000000000000"
+            },
+            {
               "tokenId": "1",
               "symbol": "UNI-V3-USDC-USDT-500",
               "liquidity": "1000000"
