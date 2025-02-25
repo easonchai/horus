@@ -243,17 +243,33 @@ def main():
     
     # Simple chat loop
     while True:
-        alert_message = input("\nSecurity Alert: ")
-        
-        if alert_message.lower() == 'exit':
-            print("Shutting down security monitoring.")
-            break
-        
         try:
+            # Clear separator to avoid confusion
+            print("\n" + "-" * 50)
+            alert_message = input("Security Alert: ")
+            
+            # Strip any leading/trailing whitespace
+            alert_message = alert_message.strip()
+            
+            if not alert_message:
+                print("Please enter a security alert or type 'exit' to quit.")
+                continue
+                
+            if alert_message.lower() == 'exit':
+                print("Shutting down security monitoring.")
+                break
+            
+            # Process the alert and get the response
             response = process_security_alert(alert_message, agent_data)
-            print(f"\nHorus Response: {response}")
+            
+            # Display the response with clear formatting
+            print("\n" + "-" * 50)
+            print("Horus Response:")
+            print(response)
+            
         except Exception as e:
             print(f"\nError: {str(e)}")
+            print("Please try again with a different security alert.")
 
 def test_multi_action_scenario():
     """
