@@ -182,7 +182,7 @@ def process_security_alert(alert_message, agent_data):
     
     try:
         response = openai_client.chat.completions.create(
-            model="gpt-4",
+            model="gpt-4o",
             messages=[
                 {"role": "system", "content": system_message},
                 {"role": "user", "content": alert_message}
