@@ -88,86 +88,140 @@ def withdrawal_tool(agent_kit, token=None, amount=None, destination=None):
     # For now, just simulate the action
     return f"Emergency withdrawal initiated: {amount} {token} to {destination}."
 
+def execute_action(agent_kit, action):
+    """
+    Execute a single action based on its type and parameters.
+    
+    Args:
+        agent_kit: The AgentKit instance
+        action: A dictionary containing the action type and parameters
+        
+    Returns:
+        The result of the action execution
+    """
+    action_type = action.get("action")
+    parameters = action.get("parameters", {})
+    
+    if action_type == "revoke":
+        return revoke_tool(
+            agent_kit, 
+            token_address=parameters.get("token_address"),
+            protocol=parameters.get("protocol")
+        )
+    elif action_type == "swap":
+        return swap_tool(
+            agent_kit,
+            from_token=parameters.get("from_token"),
+            to_token=parameters.get("to_token"),
+            amount=parameters.get("amount")
+        )
+    elif action_type == "withdrawal":
+        return withdrawal_tool(
+            agent_kit,
+            token=parameters.get("token"),
+            amount=parameters.get("amount"),
+            destination=parameters.get("destination")
+        )
+    else:
+        return f"Unknown action type: {action_type}"
+
 def process_security_alert(alert_message, agent_data):
     """
-    Process a security alert and determine the appropriate action.
+    Process a security alert and determine the appropriate action plan.
     
-    This function analyzes a security alert and decides whether to revoke permissions,
-    swap tokens, or withdraw funds based on the nature of the threat.
+    This function analyzes a security alert and decides on a sequence of actions
+    to take (revoke permissions, swap tokens, withdraw funds) based on the nature
+    of the threat.
     """
     agent_kit = agent_data["agent_kit"]
     openai_client = agent_data["openai_client"]
     
-    # Use OpenAI to analyze the security alert and determine the best action
+    # Use OpenAI to analyze the security alert and determine the best action plan
     system_message = """You are Horus, a security monitoring agent for cryptocurrency wallets.
     Your job is to protect users' funds by taking appropriate actions when security threats are detected.
     
-    Based on the security alert, determine which action to take:
+    Based on the security alert, determine a sequence of actions to take. You can use the following tools:
     1. revoke - Revoke permissions for a token or protocol that has been compromised
     2. swap - Swap vulnerable tokens for safer ones (e.g., swap a compromised token for ETH)
     3. withdrawal - Withdraw funds from a compromised protocol to a safe address
-    4. none - If no immediate action is needed or if the alert doesn't contain enough information
     
-    Return a JSON object with the following structure:
+    You can use these tools in any order, and you can use multiple tools if needed.
+    For example, you might need to withdraw funds from a compromised protocol and then swap them to a safer asset.
+    
+    IMPORTANT: You MUST respond with a valid JSON object using the following structure:
     {
-        "action": "action_name",
-        "reasoning": "explanation of why this action is appropriate",
-        "parameters": {
-            // For revoke:
-            "token_address": "address of the token to revoke (optional)",
-            "protocol": "name of the protocol (optional)",
-            
-            // For swap:
-            "from_token": "token to swap from",
-            "to_token": "token to swap to",
-            "amount": "amount to swap (can be 'all')",
-            
-            // For withdrawal:
-            "token": "token to withdraw",
-            "amount": "amount to withdraw (can be 'all')",
-            "destination": "address to withdraw to"
-        }
+        "reasoning": "explanation of your analysis and why these actions are appropriate",
+        "action_plan": [
+            {
+                "action": "action_name",
+                "explanation": "why this specific action is needed",
+                "parameters": {
+                    // For revoke:
+                    "token_address": "address of the token to revoke (optional)",
+                    "protocol": "name of the protocol (optional)",
+                    
+                    // For swap:
+                    "from_token": "token to swap from",
+                    "to_token": "token to swap to",
+                    "amount": "amount to swap (can be 'all')",
+                    
+                    // For withdrawal:
+                    "token": "token to withdraw",
+                    "amount": "amount to withdraw (can be 'all')",
+                    "destination": "address to withdraw to"
+                }
+            },
+            // Additional actions in the sequence...
+        ]
     }
+    
+    If no action is needed, return an empty action_plan array.
+    
+    DO NOT include any text outside of the JSON object. Your entire response must be valid JSON.
     """
     
     try:
         response = openai_client.chat.completions.create(
-            model="gpt-4o",
+            model="gpt-4",
             messages=[
                 {"role": "system", "content": system_message},
                 {"role": "user", "content": alert_message}
-            ],
-            response_format={"type": "json_object"}
+            ]
         )
         
-        decision = json.loads(response.choices[0].message.content)
-        action = decision.get("action", "none")
-        reasoning = decision.get("reasoning", "No reasoning provided")
-        parameters = decision.get("parameters", {})
+        # Parse the response content as JSON
+        try:
+            decision = json.loads(response.choices[0].message.content)
+            reasoning = decision.get("reasoning", "No reasoning provided")
+            action_plan = decision.get("action_plan", [])
+        except json.JSONDecodeError:
+            # If the response is not valid JSON, extract what we can
+            content = response.choices[0].message.content
+            print(f"Warning: Could not parse response as JSON. Raw response: {content}")
+            return "Error: Could not parse AI response as JSON. Please try again."
         
-        print(f"Determined action: {action}")
         print(f"Reasoning: {reasoning}")
+        print(f"Action plan contains {len(action_plan)} steps")
         
-        # Execute the appropriate action
-        if action == "revoke":
-            token_address = parameters.get("token_address")
-            protocol = parameters.get("protocol")
-            return revoke_tool(agent_kit, token_address, protocol)
-            
-        elif action == "swap":
-            from_token = parameters.get("from_token")
-            to_token = parameters.get("to_token")
-            amount = parameters.get("amount")
-            return swap_tool(agent_kit, from_token, to_token, amount)
-            
-        elif action == "withdrawal":
-            token = parameters.get("token")
-            amount = parameters.get("amount")
-            destination = parameters.get("destination")
-            return withdrawal_tool(agent_kit, token, amount, destination)
-            
-        else:
+        if not action_plan:
             return "No immediate action taken. Continuing to monitor the situation."
+        
+        # Execute each action in the plan
+        results = []
+        for i, action in enumerate(action_plan):
+            print(f"Executing step {i+1}: {action.get('action')}")
+            print(f"Explanation: {action.get('explanation', 'No explanation provided')}")
+            
+            try:
+                result = execute_action(agent_kit, action)
+                results.append(result)
+            except Exception as e:
+                error_message = f"Error executing {action.get('action')}: {str(e)}"
+                print(error_message)
+                results.append(error_message)
+        
+        # Combine the results
+        return "\n".join(results)
     
     except Exception as e:
         return f"Error processing security alert: {str(e)}"
@@ -201,5 +255,47 @@ def main():
         except Exception as e:
             print(f"\nError: {str(e)}")
 
+def test_multi_action_scenario():
+    """
+    Test function to demonstrate the agent handling a complex security scenario
+    that requires multiple actions in sequence.
+    """
+    print("Running test for multi-action security scenario...")
+    
+    # Set up the agent
+    agent_data = setup_agent()
+    
+    if not agent_data:
+        print("Failed to set up the agent. Exiting test.")
+        return
+    
+    # Test scenario that requires multiple actions
+    test_alert = """
+    URGENT SECURITY ALERT: We've detected a critical vulnerability in the Uniswap V3 protocol 
+    affecting the USDC/ETH pool. The vulnerability allows attackers to drain funds from liquidity 
+    providers. We've already seen multiple wallets being exploited. Your wallet has $50,000 USDC 
+    in this pool that needs to be secured immediately. After withdrawing, you should convert to 
+    a safer asset until the vulnerability is patched.
+    
+    Your safe wallet address is: 0x1234567890abcdef1234567890abcdef12345678
+    """
+    
+    print("\nTest Security Alert:", test_alert)
+    
+    try:
+        response = process_security_alert(test_alert, agent_data)
+        print("\nHorus Response:", response)
+    except Exception as e:
+        print(f"\nError during test: {str(e)}")
+
 if __name__ == "__main__":
-    main()
+    # Comment out the direct function calls
+    # test_multi_action_scenario()
+    # main()
+
+    # Use command line arguments to choose the mode
+    import sys
+    if len(sys.argv) > 1 and sys.argv[1] == "--test":
+        test_multi_action_scenario()
+    else:
+        main()
