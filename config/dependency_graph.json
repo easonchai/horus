@@ -1,6 +1,57 @@
 {
   "dependencies": [
     {
+      "derivativeSymbol": "beefyUSDC-USDT",
+      "chainId": "84532",
+      "protocol": "Beefy",
+      "underlyings": ["UNI-V3-USDC-USDT-500"],
+      "exitFunctions": [
+        {
+          "contractType": "vault",
+          "functionName": "withdraw",
+          "arguments": [
+            {
+              "tokenId": "uint256"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "derivativeSymbol": "beefyWBTC-EIGEN",
+      "chainId": "84532",
+      "protocol": "Beefy",
+      "underlyings": ["UNI-V3-WBTC-EIGEN-500"],
+      "exitFunctions": [
+        {
+          "contractType": "vault",
+          "functionName": "withdraw",
+          "arguments": [
+            {
+              "tokenId": "uint256"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "derivativeSymbol": "beefyUSDC-EIGEN",
+      "chainId": "84532",
+      "protocol": "Beefy",
+      "underlyings": ["UNI-V3-USDC-EIGEN-500"],
+      "exitFunctions": [
+        {
+          "contractType": "vault",
+          "functionName": "withdraw",
+          "arguments": [
+            {
+              "tokenId": "uint256"
+            }
+          ]
+        }
+      ]
+    },
+    {
       "derivativeSymbol": "UNI-V3-USDC-USDT-500",
       "chainId": "84532",
       "protocol": "UniswapV3",

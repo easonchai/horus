@@ -1,6 +1,19 @@
 {
   "protocols": [
     {
+      "name": "Beefy",
+      "chains": {
+        "84532": {
+          "beefyUSDC-USDT-Vault": "0xbeefUsdcUsdtVaultAddress",
+          "beefyWBTC-EIGEN-Vault": "0xbeefWbtcEigenVaultAddress",
+          "beefyUSDC-EIGEN-Vault": "0xbeefUsdcEigenVaultAddress"
+        }
+      },
+      "abis": {
+        "vault": "beefy_vault.json"
+      }
+    },
+    {
       "name": "UniswapV3",
       "chains": {
         "84532": {
