@@ -21,10 +21,67 @@ def build_dependency_map(dependency_graph: dict) -> Dict[str, dict]:
         key = f"{dep['derivativeSymbol']}_{dep['chainId']}"
         dep_map[key] = {
             'protocol': dep['protocol'],
-            'underlyings': [u['symbol'] for u in dep['underlyings']],
+            'underlyings': dep['underlyings'],  # Now just pass the underlyings array as is
             'exitFunctions': dep['exitFunctions']
         }
     return dep_map
+
+def get_underlying_tokens(position_symbol: str, chain_id: str, dep_map: Dict[str, dict], visited: Set[str] = None) -> Set[str]:
+    """Recursively get all underlying tokens for a position."""
+    if visited is None:
+        visited = set()
+    
+    # Prevent infinite recursion
+    if position_symbol in visited:
+        return set()
+    visited.add(position_symbol)
+    
+    position_key = f"{position_symbol}_{chain_id}"
+    if position_key not in dep_map:
+        # If not in dep_map, it's a base token
+        return {position_symbol}
+        
+    underlying_tokens = set()
+    for underlying in dep_map[position_key]['underlyings']:
+        underlying_symbol = underlying['symbol'] if isinstance(underlying, dict) else underlying
+        # Recursively get underlying tokens
+        underlying_tokens.update(
+            get_underlying_tokens(underlying_symbol, chain_id, dep_map, visited)
+        )
+    
+    return underlying_tokens
+
+def get_exit_path(position_symbol: str, chain_id: str, dep_map: Dict[str, dict], visited: Set[str] = None) -> List[dict]:
+    """Get the sequence of transactions needed to fully exit a position."""
+    if visited is None:
+        visited = set()
+    
+    if position_symbol in visited:
+        return []
+    visited.add(position_symbol)
+    
+    position_key = f"{position_symbol}_{chain_id}"
+    if position_key not in dep_map:
+        return []
+        
+    exit_path = []
+    # Add this position's exit functions
+    exit_path.extend([
+        {
+            'symbol': position_symbol,
+            'protocol': dep_map[position_key]['protocol'],
+            'functions': dep_map[position_key]['exitFunctions']
+        }
+    ])
+    
+    # Recursively get exit paths for underlying tokens
+    for underlying in dep_map[position_key]['underlyings']:
+        underlying_symbol = underlying['symbol'] if isinstance(underlying, dict) else underlying
+        exit_path.extend(
+            get_exit_path(underlying_symbol, chain_id, dep_map, visited)
+        )
+    
+    return exit_path
 
 def find_exposed_positions(
     user_data: dict,
@@ -52,8 +109,8 @@ def find_exposed_positions(
         # Check position exposure
         for position in chain_balances.get('positions', []):
             position_key = f"{position['symbol']}_{chain_id}"
-            if position_key in dep_map:
-                if compromised_token in dep_map[position_key]['underlyings']:
+            underlying_tokens = get_underlying_tokens(position['symbol'], chain_id, dep_map)
+            if compromised_token in underlying_tokens:
                     exposed_positions.append({
                         'user': user['address'],
                         'type': 'position',
@@ -67,6 +124,43 @@ def find_exposed_positions(
 def generate_exit_transactions(
     exposed_positions: List[dict],
     protocols: dict,
+    dep_map: Dict[str, dict],
+    chain_id: str
+) -> List[dict]:    
+    """Get the sequence of transactions needed to fully exit a position."""
+    if visited is None:
+        visited = set()
+    
+    if position_symbol in visited:
+        return []
+    visited.add(position_symbol)
+    
+    position_key = f"{position_symbol}_{chain_id}"
+    if position_key not in dep_map:
+        return []
+        
+    exit_path = []
+    # Add this position's exit functions
+    exit_path.extend([
+        {
+            'symbol': position_symbol,
+            'protocol': dep_map[position_key]['protocol'],
+            'functions': dep_map[position_key]['exitFunctions']
+        }
+    ])
+    
+    # Recursively get exit paths for underlying tokens
+    for underlying in dep_map[position_key]['underlyings']:
+        exit_path.extend(
+            get_exit_path(underlying['symbol'], chain_id, dep_map, visited)
+        )
+    
+    return exit_path
+
+def generate_exit_transactions(
+    exposed_positions: List[dict],
+    protocols: dict,
+    dep_map: Dict[str, dict],
     chain_id: str
 ) -> List[dict]:
     """Generate transaction data for exiting positions."""
@@ -74,37 +168,55 @@ def generate_exit_transactions(
     
     for pos in exposed_positions:
         if pos['type'] == 'position':
-            protocol_data = next(
-                p for p in protocols['protocols'] 
-                if p['name'] == pos['protocol']
-            )
+            # Get the full exit path for this position
+            exit_path = get_exit_path(pos['position']['symbol'], chain_id, dep_map)
             
-            contract_address = protocol_data['chains'][chain_id]['nonfungiblePositionManager']
-            
-            # Generate decreaseLiquidity transaction
-            transactions.append({
-                'to': contract_address,
-                'function': 'decreaseLiquidity',
-                'params': {
-                    'tokenId': pos['position']['tokenId'],
-                    'liquidity': pos['position']['liquidity'],
-                    'amount0Min': 0,  # In production, calculate this from oracle
-                    'amount1Min': 0,  # In production, calculate this from oracle
-                    'deadline': 'DEADLINE'  # In production, current time + buffer
-                }
-            })
-            
-            # Generate collect transaction
-            transactions.append({
-                'to': contract_address,
-                'function': 'collect',
-                'params': {
-                    'tokenId': pos['position']['tokenId'],
-                    'recipient': pos['user'],
-                    'amount0Max': 2**128 - 1,  # uint128 max
-                    'amount1Max': 2**128 - 1   # uint128 max
-                }
-            })
+            # Generate transactions for each step in the exit path
+            for step in exit_path:
+                protocol_data = next(
+                    p for p in protocols['protocols']
+                    if p['name'] == step['protocol']
+                )
+                
+                if step['protocol'] == 'Beefy':
+                    # Handle Beefy vault exit
+                    vault_address = protocol_data['chains'][chain_id][f"{step['symbol']}-Vault"]
+                    transactions.append({
+                        'to': vault_address,
+                        'function': 'withdraw',
+                        'params': {
+                            'tokenId': pos['position']['tokenId']
+                        }
+                    })
+                elif step['protocol'] == 'UniswapV3':
+                    # Handle Uniswap V3 position exit
+                    contract_address = protocol_data['chains'][chain_id]['nonfungiblePositionManager']
+                    
+                    # Only generate decreaseLiquidity if this is a Uniswap position
+                    if 'liquidity' in pos['position']:
+                        transactions.append({
+                            'to': contract_address,
+                            'function': 'decreaseLiquidity',
+                            'params': {
+                                'tokenId': pos['position']['tokenId'],
+                                'liquidity': pos['position']['liquidity'],
+                                'amount0Min': 0,  # In production, calculate this from oracle
+                                'amount1Min': 0,  # In production, calculate this from oracle
+                                'deadline': 'DEADLINE'  # In production, current time + buffer
+                            }
+                        })
+                    
+                    # Generate collect transaction
+                    transactions.append({
+                        'to': contract_address,
+                        'function': 'collect',
+                        'params': {
+                            'tokenId': pos['position']['tokenId'],
+                            'recipient': pos['user'],
+                            'amount0Max': 2**128 - 1,  # uint128 max
+                            'amount1Max': 2**128 - 1   # uint128 max
+                        }
+                    })
             
     return transactions
 
@@ -153,6 +265,7 @@ def main():
     transactions = generate_exit_transactions(
         exposed_positions,
         protocols,
+        dep_map,
         chain_id
     )
 
