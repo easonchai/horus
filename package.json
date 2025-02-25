@@ -8,7 +8,10 @@
     "dev": "cd packages/horus && poetry run dev",
     "build": "cd packages/horus && poetry build",
     "lint": "cd packages/horus && poetry run pylint horus",
-    "test": "cd packages/horus && poetry run pytest"
+    "test": "cd packages/horus && poetry run pytest",
+    "install": "cd packages/horus && poetry install",
+    "update-deps": "cd packages/horus && poetry update",
+    "install-coinbase": "cd packages/horus && poetry add coinbase-agentkit@latest coinbase-agentkit-langchain@latest --allow-prereleases"
   },
   "devDependencies": {
     "turbo": "latest"
