@@ -1,0 +1,17 @@
+{
+  "name": "horus-monorepo",
+  "private": true,
+  "workspaces": [
+    "packages/*"
+  ],
+  "scripts": {
+    "dev": "cd packages/horus && poetry run dev",
+    "build": "cd packages/horus && poetry build",
+    "lint": "cd packages/horus && poetry run pylint horus",
+    "test": "cd packages/horus && poetry run pytest"
+  },
+  "devDependencies": {
+    "turbo": "latest"
+  },
+  "packageManager": "pnpm@8.15.1"
+}

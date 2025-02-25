@@ -1,0 +1,8 @@
+dyld[90132]: Library not loaded: @executable_path/../lib/libpython3.10.dylib
+  Referenced from: <E0CD0C6A-E3B2-3C23-8F39-B47D837DC70A> /Users/fourcolors/Library/Application Support/pypoetry/venv/bin/python3
+  Reason: tried: '/Users/fourcolors/Library/Application Support/pypoetry/venv/lib/libpython3.10.dylib' (no such file), '/usr/local/lib/libpython3.10.dylib' (no such file), '/usr/lib/libpython3.10.dylib' (no such file, not in dyld cache)
+
+Traceback:
+
+  File "<stdin>", line 937, in main
+  File "<stdin>", line 576, in run

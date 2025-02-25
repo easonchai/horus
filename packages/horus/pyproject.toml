@@ -1,0 +1,18 @@
+[tool.poetry]
+name = "horus"
+version = "0.1.0"
+description = "Horus project for EthDenver2025"
+authors = ["Your Name <your.email@example.com>"]
+
+[tool.poetry.dependencies]
+python = "^3.10.12"
+
+[tool.poetry.group.dev.dependencies]
+pytest = "^8.0.0"
+
+[build-system]
+requires = ["poetry-core"]
+build-backend = "poetry.core.masonry.api"
+
+[tool.poetry.scripts]
+dev = "horus.main:main"

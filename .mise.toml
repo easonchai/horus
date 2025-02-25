@@ -1,0 +1,6 @@
+[tools]
+python = "3.10.12"
+node = "22.14.0"
+
+[env]
+PYTHON_KEYRING_BACKEND = "keyring.backends.null.Keyring"
