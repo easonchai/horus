@@ -16,8 +16,8 @@ logger = logging.getLogger(__name__)
 # Load environment variables
 load_dotenv()
 
-# Add the current directory to the path
-sys.path.append(os.path.dirname(os.path.abspath(__file__)))
+# Add the parent directory to the path
+sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 # Import the security agent
 from horus.agents.security_agent import SecurityAgent
@@ -30,8 +30,8 @@ def test_security_alert():
     # Initialize OpenAI client
     openai_client = OpenAI(api_key=os.getenv("OPENAI_API_KEY"))
     
-    # Create security agent
-    security_agent = SecurityAgent(openai_client)
+    # Create security agent with mock OpenAI to avoid API calls during testing
+    security_agent = SecurityAgent(openai_client, mock_openai=True)
     
     # Process a test alert
     test_alert = """
@@ -77,7 +77,7 @@ def test_revoke_tool():
     # Execute the revoke tool
     print("\nRevoke Tool Test:")
     print("-" * 50)
-    result = security_agent.revoke_tool.execute(parameters)
+    result = security_agent.revoke_tool(parameters)
     print(result)
     print("-" * 50)
 
@@ -101,7 +101,7 @@ def test_monitor_tool():
     # Execute the monitor tool
     print("\nMonitor Tool Test:")
     print("-" * 50)
-    result = security_agent.monitor_tool.execute(parameters)
+    result = security_agent.monitor_tool(parameters)
     print(result)
     print("-" * 50)
 

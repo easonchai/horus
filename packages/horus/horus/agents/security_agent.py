@@ -4,9 +4,10 @@ Security agent for the Horus security monitoring system.
 import json
 import logging
 import os
+import re
 from typing import Dict, Any, List, Optional, Tuple
 
-from horus.tools import WithdrawalTool, RevokeTool, MonitorTool
+from horus.tools import create_withdrawal_tool, create_revoke_tool, create_monitor_tool
 
 # Configure logging
 logging.basicConfig(level=logging.INFO, format='[%(asctime)s] %(message)s')
@@ -14,20 +15,30 @@ logger = logging.getLogger(__name__)
 
 
 class SecurityAgent:
-    """Security agent for processing security alerts and taking actions."""
-    
-    def __init__(self, openai_client):
-        """Initialize the security agent with an OpenAI client."""
+    """Agent for handling security-related tasks."""
+
+    def __init__(self, openai_client, mock_openai=False, mock_twitter=True):
+        """
+        Initialize the security agent.
+        
+        Args:
+            openai_client: The OpenAI client.
+            mock_openai: Whether to mock OpenAI responses.
+            mock_twitter: Whether to mock Twitter responses.
+        """
         self.openai_client = openai_client
+        self.mock_openai = mock_openai
+        self.mock_twitter = mock_twitter
+        
         # Load configuration files
         self.dependency_graph = self._load_dependency_graph()
         self.user_balances = self._load_user_balances()
         self.tokens_config = self._load_tokens_config()
         
         # Initialize tools
-        self.withdrawal_tool = WithdrawalTool(self.dependency_graph, self.user_balances)
-        self.revoke_tool = RevokeTool(self.tokens_config)
-        self.monitor_tool = MonitorTool()
+        self.withdrawal_tool = create_withdrawal_tool(self.dependency_graph, self.user_balances)
+        self.revoke_tool = create_revoke_tool(self.tokens_config)
+        self.monitor_tool = create_monitor_tool()
         
     def _load_dependency_graph(self) -> Dict[str, Any]:
         """
@@ -224,7 +235,7 @@ class SecurityAgent:
         
     def process_security_alert(self, alert_text: str) -> str:
         """
-        Process a security alert and determine the appropriate action to take.
+        Process a security alert and take appropriate action.
         
         Args:
             alert_text: The text of the security alert.
@@ -232,208 +243,185 @@ class SecurityAgent:
         Returns:
             A string describing the action taken.
         """
+        # Prepare the context for the AI
+        context = self._prepare_context_for_ai()
+        
+        # If we're mocking OpenAI, return a mock response
+        if self.mock_openai:
+            logger.info("Using mock OpenAI response")
+            return self._get_mock_response(alert_text)
+        
+        # Otherwise, use the OpenAI API to process the alert
         try:
-            # Prepare context information to include in the OpenAI request
-            context = self._prepare_context_for_ai()
-            
-            # Analyze the security alert with OpenAI
             response = self.openai_client.chat.completions.create(
                 model="gpt-4o",
                 messages=[
-                    {
-                        "role": "system",
-                        "content": f"""You are Horus, a security monitoring agent for cryptocurrency wallets and DeFi protocols.
-                        Your task is to analyze security alerts and determine the appropriate action to take to protect user funds.
-                        
-                        You have access to the following information about the user's portfolio:
-                        {context}
-                        
-                        You should understand the relationships between different tokens and protocols to make informed decisions.
-                        
-                        You should respond with a JSON object containing:
-                        1. "reasoning": Your analysis of the security alert and why you're taking the action
-                        2. "action_plan": An array of actions to take, each with:
-                           - "action": The type of action (e.g., "withdrawal", "revoke", "monitor")
-                           - "explanation": A brief explanation of the action
-                           - "parameters": The parameters for the action
-                        
-                        For withdrawal actions, the parameters MUST include:
-                        - "token": The exact token symbol to withdraw (must match exactly what's in the user portfolio)
-                        - "amount": The amount to withdraw (use "ALL" for full withdrawal)
-                        - "destination": The destination address for the withdrawn funds
-                        - "chain_id": The chain ID where the token is located
-                        
-                        For revoke actions, the parameters MUST include:
-                        - "token_address": The contract address of the token
-                        - "protocol": The protocol to revoke permissions from
-                        - "chain_id": The chain ID where the token is located
-                        
-                        For monitor actions, the parameters MUST include:
-                        - "asset": The asset to monitor
-                        - "duration": The duration to monitor (e.g., "24h")
-                        
-                        Only include actions that are necessary to protect user funds. If no action is needed, return an empty array for "action_plan".
-                        """
-                    },
-                    {
-                        "role": "user",
-                        "content": alert_text
-                    }
+                    {"role": "system", "content": context},
+                    {"role": "user", "content": f"SECURITY ALERT: {alert_text}"}
                 ],
-                response_format={"type": "json_object"}
+                temperature=0.2,
             )
             
-            # Parse the response
-            response_content = response.choices[0].message.content
-            response_json = json.loads(response_content)
+            # Extract the response text
+            response_text = response.choices[0].message.content
+            logger.info(f"OpenAI response: {response_text}")
             
-            # Extract the reasoning and action plan
-            reasoning = response_json.get("reasoning", "No reasoning provided.")
-            action_plan = response_json.get("action_plan", [])
+            # Parse the response to determine the action to take
+            action_type, parameters = self._parse_ai_response(response_text)
             
-            # Log the reasoning
-            logger.info(f"Reasoning: {reasoning}")
+            # Take the appropriate action
+            if action_type == "withdrawal":
+                return self.withdrawal_tool(parameters)
+            elif action_type == "revoke":
+                return self.revoke_tool(parameters)
+            elif action_type == "monitor":
+                return self.monitor_tool(parameters)
+            else:
+                return f"No action taken. AI response: {response_text}"
             
-            # Execute the action plan
-            if not action_plan:
-                return "No action needed."
-            
-            logger.info(f"Action plan contains {len(action_plan)} steps")
-            result = []
-            
-            for i, action in enumerate(action_plan):
-                action_type = action.get("action")
-                explanation = action.get("explanation")
-                parameters = action.get("parameters", {})
-                
-                logger.info(f"Executing step {i+1}: {action_type}")
-                logger.info(f"Explanation: {explanation}")
-                
-                # Execute the action based on its type
-                if action_type == "withdrawal":
-                    token = parameters.get("token", "unknown")
-                    amount = parameters.get("amount", "0")
-                    destination = parameters.get("destination", "unknown")
-                    
-                    logger.info(f"Extracted withdrawal parameters - token: {token}, amount: {amount}, destination: {destination}")
-                    logger.info(f"Full parameters from OpenAI: {parameters}")
-                    
-                    # Use the withdrawal tool to execute the exit function
-                    exit_result = self.withdrawal_tool.execute(parameters)
-                    result.append(exit_result)
-                
-                elif action_type == "revoke":
-                    token_address = parameters.get("token_address", "unknown")
-                    protocol = parameters.get("protocol", "unknown")
-                    
-                    # Use the revoke tool to execute the revoke function
-                    revoke_result = self.revoke_tool.execute(parameters)
-                    result.append(revoke_result)
-                
-                elif action_type == "monitor":
-                    asset = parameters.get("asset", "unknown")
-                    duration = parameters.get("duration", "24h")
-                    
-                    # Use the monitor tool to execute the monitoring function
-                    monitor_result = self.monitor_tool.execute(parameters)
-                    result.append(monitor_result)
-                
-                else:
-                    logger.warning(f"Unknown action type: {action_type}")
-                    result.append(f"Unknown action: {action_type}")
-            
-            return " ".join(result)
-        
         except Exception as e:
-            logger.error(f"Error processing security alert: {str(e)}")
+            logger.error(f"Error processing security alert: {e}")
+            return f"Error processing security alert: {e}"
+
+    def _get_mock_response(self, alert_text: str) -> str:
+        """
+        Generate a mock response for testing purposes.
+        
+        Args:
+            alert_text: The text of the security alert.
             
-            # For invalid API key or connection errors, use mock response
-            if "invalid_api_key" in str(e) or "connection" in str(e).lower():
-                logger.warning("Using mock response due to API key or connection issue (GPT-4o unavailable)")
-                mock_response = {
-                    "reasoning": "MOCK RESPONSE: This is a critical security vulnerability that requires immediate action.",
-                    "action_plan": [
-                        {
-                            "action": "withdrawal",
-                            "explanation": "Emergency withdrawal of funds to prevent loss",
-                            "parameters": {
-                                "token": "ETH",
-                                "amount": "ALL",
-                                "destination": "cold_wallet_1",
-                                "chain_id": "1"
-                            }
-                        },
-                        {
-                            "action": "revoke",
-                            "explanation": "Revoke permissions to prevent further access",
-                            "parameters": {
-                                "token_address": "0x123456789...",
-                                "protocol": "Affected Protocol",
-                                "chain_id": "1"
-                            }
-                        },
-                        {
-                            "action": "monitor",
-                            "explanation": "Monitor for additional suspicious activity",
-                            "parameters": {
-                                "asset": "All connected wallets",
-                                "duration": "72h"
-                            }
-                        }
-                    ]
+        Returns:
+            A string describing the action taken.
+        """
+        logger.info("Generating mock response")
+        
+        # Extract keywords from the alert text to determine the appropriate action
+        alert_lower = alert_text.lower()
+        
+        if "withdraw" in alert_lower or "vulnerability" in alert_lower:
+            parameters = {
+                "token": "USDC",
+                "amount": "ALL",
+                "destination": "safe_wallet",
+                "chain_id": "84532",  # Base chain
+                "user_address": "0xf39Fd6e51aad88F6F4ce6aB8827279cffFb92266"
+            }
+            return self.withdrawal_tool(parameters)
+            
+        elif "revoke" in alert_lower or "permissions" in alert_lower:
+            parameters = {
+                "token": "USDC",
+                "protocol": "Compromised Protocol",
+                "chain_id": "84532"  # Base chain
+            }
+            return self.revoke_tool(parameters)
+            
+        else:
+            parameters = {
+                "asset": "All Base Chain Positions",
+                "duration": "48h",
+                "threshold": "3%"
+            }
+            return self.monitor_tool(parameters)
+
+    def _parse_ai_response(self, response_text: str) -> Tuple[str, Dict[str, Any]]:
+        """
+        Parse the AI response to determine the action to take.
+        
+        Args:
+            response_text: The response from the AI.
+            
+        Returns:
+            A tuple containing the action type and parameters.
+        """
+        logger.info("Parsing AI response")
+        
+        try:
+            # Try to parse as JSON first
+            try:
+                response_json = json.loads(response_text)
+                
+                # If the response is a JSON object with an action_plan field
+                if "action_plan" in response_json and isinstance(response_json["action_plan"], list):
+                    # Take the first action in the plan
+                    if response_json["action_plan"]:
+                        action = response_json["action_plan"][0]
+                        return action.get("action", "unknown"), action.get("parameters", {})
+            except json.JSONDecodeError:
+                # Not valid JSON, continue with text parsing
+                pass
+                
+            # If not valid JSON or doesn't have the expected structure, parse as text
+            response_lower = response_text.lower()
+            
+            if "withdraw" in response_lower:
+                # Extract parameters from the text
+                parameters = {
+                    "token": self._extract_parameter(response_text, "token", "USDC"),
+                    "amount": self._extract_parameter(response_text, "amount", "ALL"),
+                    "destination": self._extract_parameter(response_text, "destination", "safe_wallet"),
+                    "chain_id": self._extract_parameter(response_text, "chain", "84532"),
+                    "user_address": "0xf39Fd6e51aad88F6F4ce6aB8827279cffFb92266"
                 }
+                return "withdrawal", parameters
                 
-                reasoning = mock_response.get("reasoning", "No reasoning provided.")
-                action_plan = mock_response.get("action_plan", [])
+            elif "revoke" in response_lower:
+                # Extract parameters from the text
+                parameters = {
+                    "token": self._extract_parameter(response_text, "token", "USDC"),
+                    "protocol": self._extract_parameter(response_text, "protocol", "Compromised Protocol"),
+                    "chain_id": self._extract_parameter(response_text, "chain", "84532")
+                }
+                return "revoke", parameters
                 
-                logger.info(f"Mock Reasoning: {reasoning}")
+            elif "monitor" in response_lower:
+                # Extract parameters from the text
+                parameters = {
+                    "asset": self._extract_parameter(response_text, "asset", "All Positions"),
+                    "duration": self._extract_parameter(response_text, "duration", "48h"),
+                    "threshold": self._extract_parameter(response_text, "threshold", "3%")
+                }
+                return "monitor", parameters
                 
-                if not action_plan:
-                    return "No action needed (mock response)."
+            else:
+                # Default to monitoring if no specific action is mentioned
+                parameters = {
+                    "asset": "All Positions",
+                    "duration": "24h",
+                    "threshold": "5%"
+                }
+                return "monitor", parameters
                 
-                logger.info(f"Mock Action plan contains {len(action_plan)} steps")
-                result = []
-                
-                for i, action in enumerate(action_plan):
-                    action_type = action.get("action")
-                    explanation = action.get("explanation")
-                    parameters = action.get("parameters", {})
-                    
-                    logger.info(f"Executing mock step {i+1}: {action_type}")
-                    logger.info(f"Mock Explanation: {explanation}")
-                    
-                    if action_type == "withdrawal":
-                        token = parameters.get("token", "unknown")
-                        amount = parameters.get("amount", "0")
-                        destination = parameters.get("destination", "unknown")
-                        
-                        # Use a mock version of the withdrawal tool
-                        logger.info(f"MOCK WITHDRAWAL TOOL CALLED: Withdrawing {amount} {token} to {destination}")
-                        mock_result = f"[MOCK] {self.withdrawal_tool.execute(parameters)}"
-                        result.append(mock_result)
-                    
-                    elif action_type == "revoke":
-                        token_address = parameters.get("token_address", "unknown")
-                        protocol = parameters.get("protocol", "unknown")
-                        
-                        # Use a mock version of the revoke tool
-                        logger.info(f"MOCK REVOKE TOOL CALLED: Revoking permissions for {token_address} on {protocol}")
-                        mock_result = f"[MOCK] {self.revoke_tool.execute(parameters)}"
-                        result.append(mock_result)
-                    
-                    elif action_type == "monitor":
-                        asset = parameters.get("asset", "unknown")
-                        duration = parameters.get("duration", "24h")
-                        
-                        # Use a mock version of the monitor tool
-                        logger.info(f"MOCK MONITOR TOOL CALLED: Enhanced monitoring for {asset} for the next {duration}")
-                        mock_result = f"[MOCK] {self.monitor_tool.execute(parameters)}"
-                        result.append(mock_result)
-                    
-                    else:
-                        logger.warning(f"Unknown mock action type: {action_type}")
-                        result.append(f"[MOCK] Unknown action: {action_type}")
-                
-                return " ".join(result)
+        except Exception as e:
+            logger.error(f"Error parsing AI response: {e}")
+            # Default to monitoring in case of error
+            parameters = {
+                "asset": "All Positions",
+                "duration": "24h",
+                "threshold": "5%"
+            }
+            return "monitor", parameters
             
-            return f"Error processing security alert: {str(e)}"
+    def _extract_parameter(self, text: str, param_name: str, default_value: str) -> str:
+        """
+        Extract a parameter value from text.
+        
+        Args:
+            text: The text to extract from.
+            param_name: The name of the parameter.
+            default_value: The default value if the parameter is not found.
+            
+        Returns:
+            The extracted parameter value or the default value.
+        """
+        import re
+        
+        # Try to find the parameter in the text
+        pattern = rf'{param_name}["\s:]+([^",\s]+|"[^"]+"|\'[^\']+\')'
+        match = re.search(pattern, text, re.IGNORECASE)
+        
+        if match:
+            value = match.group(1).strip('"\'')
+            return value
+            
+        return default_value
