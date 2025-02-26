@@ -23,11 +23,15 @@ cd ethDenver2025
 
 ### 2. Install Root Dependencies
 
-The project uses Turborepo for monorepo management. Install the root dependencies:
+The project uses Turborepo for monorepo management and pnpm as the package manager. Install the root dependencies:
 
 ```bash
-npm install
+pnpm install
 ```
+
+This will:
+1. Install all Node.js dependencies
+2. Run the script to install Python dependencies using Poetry
 
 ### 3. Install Horus Dependencies
 
@@ -70,29 +74,38 @@ USE_MOCK_DATA=true  # Set to false to use real API calls
 You can run the Horus agent in various modes:
 
 ```bash
-# Run the interactive agent
+# Run the interactive agent using pnpm (recommended)
+pnpm dev
+
+# Or directly using Poetry if preferred
 poetry run python horus/main.py
 
 # Run with Twitter monitoring enabled
-poetry run python horus/main.py --twitter
+pnpm -w dev:twitter
 
 # Run with Twitter monitoring and custom check interval (in seconds)
 poetry run python horus/main.py --twitter --interval 300
 
 # Run a test scenario
-poetry run python horus/main.py --test
+pnpm test
 ```
 
-### Using NPM Scripts
+### Using pnpm Scripts
 
-The project provides npm scripts for common tasks:
+The project provides pnpm scripts for common tasks:
 
 ```bash
 # Run the development server
-npm run dev -w packages/horus
+pnpm dev
 
 # Run tests
-npm run test -w packages/horus
+pnpm test
+
+# Run linting
+pnpm lint
+
+# Build the project
+pnpm build
 ```
 
 ### Using Poetry Scripts
