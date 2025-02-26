@@ -4,6 +4,7 @@
 
 # Python artifacts
 __pycache__/
+**/__pycache__/
 *.py[cod]
 *$py.class
 *.so
@@ -26,6 +27,7 @@ wheels/
 
 # Testing
 .pytest_cache/
+**/.pytest_cache/
 .coverage
 htmlcov/
 
