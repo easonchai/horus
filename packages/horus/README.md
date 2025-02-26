@@ -7,10 +7,11 @@ Horus is a security monitoring agent for cryptocurrency wallets that protects us
 - **Multi-Action Security Response**: Horus can execute multiple security actions in sequence based on the nature of the threat.
 - **Intelligent Threat Analysis**: Uses OpenAI to analyze security alerts and determine the best course of action.
 - **Twitter Security Monitoring**: Automatically monitors trusted Twitter accounts for cryptocurrency security threats and takes appropriate actions.
-- **Flexible Security Tools**:
-  - **Revoke**: Revoke permissions for compromised tokens or protocols
-  - **Swap**: Swap vulnerable tokens for safer alternatives
-  - **Withdrawal**: Withdraw funds from compromised protocols to secure addresses
+- **Dependency Graph Analysis**: Utilizes token dependency information to make intelligent decisions about protocol relationships.
+- **User Balance Awareness**: Takes into account user's portfolio positions when making security decisions.
+- **Dynamic Tool Calling**: Automatically selects appropriate tools for different security scenarios.
+- **Flexible Operational Modes**: Supports multiple operational modes, including mock modes for testing and development.
+- **Modular Tool Architecture**: Uses a modular tool architecture for easy extension with new security actions.
 
 ## Overview
 
@@ -21,6 +22,8 @@ Horus is a cryptocurrency security monitoring agent designed to detect and respo
 - Real-time monitoring of trusted security Twitter accounts
 - AI-powered analysis of security threats using OpenAI
 - Customizable action plans for different threat scenarios
+- Dependency-aware token and protocol management
+- Position-aware security decision making
 - Mock mode for testing without Twitter API credentials
 - Interactive CLI for manual security alert processing
 
@@ -32,18 +35,77 @@ Horus uses a sophisticated approach to handle security threats:
 
 2. **Action Plan Generation**: Instead of just taking a single action, Horus generates a complete action plan that may include multiple steps in the optimal sequence.
 
-3. **Sequential Execution**: The agent executes each action in the plan in order, with proper error handling between steps.
+3. **Dependency Graph Analysis**: The system analyzes the dependency relationships between tokens and protocols to understand how security issues may propagate through the system.
 
-4. **Tool Composition**: The system can compose different tools together in various sequences depending on the specific security scenario. For example:
+4. **User Position Consideration**: Horus examines the user's current token positions to prioritize protecting the most at-risk assets.
+
+5. **Sequential Execution**: The agent executes each action in the plan in order, with proper error handling between steps.
+
+6. **Tool Composition**: The system can compose different tools together in various sequences depending on the specific security scenario. For example:
    - For a compromised token: Revoke permissions → Swap to a safer asset
    - For a vulnerable protocol: Withdraw funds → Swap to a safer asset → Revoke permissions
    - For a wallet compromise: Withdraw all funds → Revoke all permissions
 
 This approach allows Horus to handle complex security scenarios that require multiple coordinated actions to fully secure the user's assets.
 
+## Configuration Files
+
+Horus uses multiple configuration files to store important information:
+
+1. **Dependency Graph** (`/config/dependency_graph.json`): Defines relationships between tokens and protocols, including:
+   - Derivative tokens and their underlying assets
+   - Chain IDs and protocol information
+   - Exit functions with their contract types and function signatures
+
+2. **User Balances** (`/user_data/user_balances.json`): Stores user portfolio information:
+   - Wallet addresses
+   - Token balances across different chains
+   - Positions in various protocols with detailed share and liquidity information
+
+3. **Tokens Configuration** (`/config/tokens.json`): Contains token metadata:
+   - Token names, symbols, and decimals
+   - Contract addresses for different networks
+
+## Security Tools
+
+Horus implements a modular tool architecture that allows it to respond to security threats in various ways. Each tool is responsible for executing a specific security action.
+
+### Available Tools
+
+- **WithdrawalTool**: Withdraws funds from compromised protocols to secure addresses
+- **RevokeTool**: Revokes permissions for compromised tokens or protocols
+- **MonitorTool**: Monitors assets for suspicious activity
+
+The tools are implemented as Python classes that inherit from the base `BaseTool` class. Each tool implements an `execute` method that takes a dictionary of parameters and returns a string describing the action taken.
+
+For more information about the tools, see the [tools README](/packages/horus/horus/tools/README.md).
+
 ## Getting Started
 
 See the [Setup Instructions](./docs/setup_instructions.md) for detailed information on installation and configuration.
+
+### Installation
+
+1. Clone the repository
+2. Install dependencies with Poetry:
+   ```
+   poetry install
+   ```
+3. Copy `.env.example` to `.env` and fill in your API keys
+
+### Running Tests
+
+To run the tests, use the following command:
+
+```bash
+# Run all tests
+python -m pytest
+
+# Run a specific test
+python -m tests.test_security
+python -m tests.test_twitter_monitor
+python -m tests.test_agent_setup
+```
 
 ### Quick Start
 
@@ -220,7 +282,7 @@ The agent provides detailed reasoning for each action and handles the execution 
 ### Example Output
 
 ```
-Reasoning: This alert indicates that the Uniswap V3 protocol, specifically the USDC/ETH pool, has a critical vulnerability that could allow attackers to drain funds. The wallet in question has significant funds (USDC worth $50,000) in this pool. To prevent potential loss, we need to withdraw the funds from the vulnerable protocol and then swap the tokens for a different, safer asset until the vulnerability is rectified.
+Reasoning: This alert indicates that the Uniswap V3 protocol, specifically the USDC/ETH pool, has a critical vulnerability that could allow attackers to drain funds. The wallet in question has significant funds (USDC worth $50,000) in this pool. To prevent potential loss, we need to withdraw the funds from the compromised protocol and then swap the tokens for a different, safer asset until the vulnerability is rectified.
 
 Action plan contains 3 steps
 Executing step 1: withdrawal
