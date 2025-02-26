@@ -40,6 +40,8 @@ cd <repository-directory>/packages/horus
 poetry install
 ```
 
+For detailed setup instructions, including prerequisites, environment configuration, and troubleshooting, see the [Setup Instructions](docs/setup_instructions.md).
+
 ## Usage
 
 ### Running the Agent

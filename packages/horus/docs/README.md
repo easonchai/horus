@@ -6,6 +6,7 @@ This directory contains documentation for the Horus crypto security monitoring a
 
 - [Twitter Monitoring Process Flow](twitter_monitoring_flow.md) - Detailed explanation of the Twitter monitoring feature
 - [Twitter Monitoring Diagram](twitter_monitoring_diagram.md) - Visual diagram of the Twitter monitoring process flow
+- [Setup Instructions](setup_instructions.md) - Comprehensive guide for setting up and developing Horus
 
 ## Overview
 
@@ -13,7 +14,7 @@ Horus is a security monitoring agent for cryptocurrency wallets that protects us
 
 ## Getting Started
 
-To get started with Horus, refer to the main [README.md](../README.md) file in the project root directory. It contains installation instructions, usage examples, and an overview of the system's features.
+To get started with Horus, refer to the main [README.md](../README.md) file in the project root directory for a quick overview. For a comprehensive setup guide, see the [Setup Instructions](setup_instructions.md) which contains detailed information on installation, configuration, development workflow, and troubleshooting.
 
 ## Contributing
 
