@@ -4,28 +4,113 @@
       "name": "Beefy",
       "chains": {
         "84532": {
-          "beefyUSDC-USDT-Vault": "0xbeefUsdcUsdtVaultAddress",
-          "beefyWBTC-EIGEN-Vault": "0xbeefWbtcEigenVaultAddress",
-          "beefyUSDC-EIGEN-Vault": "0xbeefUsdcEigenVaultAddress"
+          "beefyUSDC-USDT-Vault": "0x35320879DFC0b6bcF8496D251582eA41da8Cd95f",
+          "beefyWBTC-EIGEN-Vault": "0xe1cDcBBD32699B8e407B506421df9Bb55e298B3B",
+          "beefyUSDC-EIGEN-Vault": "0xe963495267318FCD77D1BDAc88c5eB5BF878e3C9"
         }
       },
       "abis": {
-        "vault": "beefy_vault.json"
+        "BeefyVault": [
+          {
+            "inputs": [
+              {
+                "internalType": "uint256",
+                "name": "tokenId",
+                "type": "uint256"
+              }
+            ],
+            "name": "deposit",
+            "outputs": [],
+            "stateMutability": "nonpayable",
+            "type": "function"
+          },
+          {
+            "inputs": [
+              {
+                "internalType": "uint256",
+                "name": "tokenId",
+                "type": "uint256"
+              }
+            ],
+            "name": "withdraw",
+            "outputs": [],
+            "stateMutability": "nonpayable",
+            "type": "function"
+          }
+        ]
       }
     },
     {
       "name": "UniswapV3",
       "chains": {
         "84532": {
-          "nonfungiblePositionManager": "0x27F971cb582BF9E50F397e4d29a5C7A34f11faA2",
-          "factory": "0x0227628f3F023bb0B980b67D528571c95c6DaC1c",
-          "router": "0xE592427A0AEce92De3Edee1F18E0157C05861564"
+          "nonfungiblePositionManager": "0x27F971cb582BF9E50F397e4d29a5C7A34f11faA2"
         }
       },
       "abis": {
-        "nonfungiblePositionManager": "uniswap_v3_nft_manager.json",
-        "factory": "uniswap_v3_factory.json",
-        "pool": "uniswap_v3_pool.json"
+        "NonfungiblePositionManager": [
+          {
+            "inputs": [
+              {
+                "internalType": "uint256",
+                "name": "tokenId",
+                "type": "uint256"
+              },
+              {
+                "internalType": "uint128",
+                "name": "liquidity",
+                "type": "uint128"
+              },
+              {
+                "internalType": "uint256",
+                "name": "amount0Min",
+                "type": "uint256"
+              },
+              {
+                "internalType": "uint256",
+                "name": "amount1Min",
+                "type": "uint256"
+              },
+              {
+                "internalType": "uint256",
+                "name": "deadline",
+                "type": "uint256"
+              }
+            ],
+            "name": "decreaseLiquidity",
+            "outputs": [],
+            "stateMutability": "nonpayable",
+            "type": "function"
+          },
+          {
+            "inputs": [
+              {
+                "internalType": "uint256",
+                "name": "tokenId",
+                "type": "uint256"
+              },
+              {
+                "internalType": "address",
+                "name": "recipient",
+                "type": "address"
+              },
+              {
+                "internalType": "uint128",
+                "name": "amount0Max",
+                "type": "uint128"
+              },
+              {
+                "internalType": "uint128",
+                "name": "amount1Max",
+                "type": "uint128"
+              }
+            ],
+            "name": "collect",
+            "outputs": [],
+            "stateMutability": "nonpayable",
+            "type": "function"
+          }
+        ]
       }
     }
   ]
