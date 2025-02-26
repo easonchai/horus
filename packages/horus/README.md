@@ -12,6 +12,18 @@ Horus is a security monitoring agent for cryptocurrency wallets that protects us
   - **Swap**: Swap vulnerable tokens for safer alternatives
   - **Withdrawal**: Withdraw funds from compromised protocols to secure addresses
 
+## Overview
+
+Horus is a cryptocurrency security monitoring agent designed to detect and respond to potential security threats through Twitter monitoring and AI-powered analysis.
+
+## Key Features
+
+- Real-time monitoring of trusted security Twitter accounts
+- AI-powered analysis of security threats using OpenAI
+- Customizable action plans for different threat scenarios
+- Mock mode for testing without Twitter API credentials
+- Interactive CLI for manual security alert processing
+
 ## How It Works
 
 Horus uses a sophisticated approach to handle security threats:
@@ -28,6 +40,41 @@ Horus uses a sophisticated approach to handle security threats:
    - For a wallet compromise: Withdraw all funds → Revoke all permissions
 
 This approach allows Horus to handle complex security scenarios that require multiple coordinated actions to fully secure the user's assets.
+
+## Getting Started
+
+See the [Setup Instructions](./docs/setup_instructions.md) for detailed information on installation and configuration.
+
+### Quick Start
+
+1. Clone the repository and navigate to the project directory
+2. Create a `.env` file based on `.env.example`
+3. Install dependencies: `poetry install`
+4. Run Horus with mock Twitter data but real OpenAI: 
+   ```
+   poetry run python -m horus.cli.app
+   ```
+
+### Available Modes
+
+Horus supports different operational modes:
+
+1. **Full Mock Mode**: Uses mock Twitter data and mock OpenAI responses
+   - No API keys required
+   - Best for initial testing
+
+2. **Mock Twitter + Real OpenAI Mode** (Default): Uses mock Twitter data but real OpenAI calls
+   - Requires OPENAI_API_KEY in .env
+   - Good for testing OpenAI integration without Twitter API setup
+
+3. **Real Twitter + Real OpenAI Mode**: Uses real Twitter API and real OpenAI
+   - Requires all Twitter API credentials and OPENAI_API_KEY in .env
+   - For production use
+
+### Command-Line Options
+
+- `--interval <seconds>`: Set the Twitter monitoring interval (default: 300 seconds)
+- `--test`: Run a test scenario with predefined security alerts
 
 ## Installation
 
@@ -76,6 +123,38 @@ poetry run python horus/main.py
 # Using scripts
 poetry run dev  # Interactive mode
 poetry run test # Test scenario
+```
+
+## Project Structure
+
+The project is organized into the following directories:
+
+- `horus/`: Main package directory
+  - `agents/`: Security and Twitter monitoring agent modules
+  - `cli/`: Command-line interface modules
+  - `mock/`: Mock data and API client modules
+  - `twitter_monitor.py`: Twitter monitoring functionality
+  - `main.py`: Main entry point for the application
+- `examples/`: Example scripts and usage demos
+- `docs/`: Documentation for the project
+
+## Environment Configuration
+
+Create a `.env` file based on `.env.example` with the following variables:
+
+```
+# Twitter API (Optional if USE_MOCK_DATA=true)
+TWITTER_BEARER_TOKEN=your_bearer_token
+TWITTER_API_KEY=your_api_key
+TWITTER_API_SECRET=your_api_secret
+TWITTER_ACCESS_TOKEN=your_access_token
+TWITTER_ACCESS_TOKEN_SECRET=your_access_token_secret
+
+# OpenAI API (Required for real OpenAI analysis)
+OPENAI_API_KEY=your_openai_api_key
+
+# Horus Configuration
+USE_MOCK_DATA=true  # Controls Twitter data mocking
 ```
 
 ## Documentation
@@ -161,24 +240,10 @@ Emergency swap initiated: all USDC to ETH.
 Permission revocation initiated for protocol Uniswap V3.
 ```
 
-## Environment Variables
+## Contributing
 
-Create a `.env` file with the following variables:
-
-```
-CDP_API_KEY_NAME=your_api_key_name
-CDP_API_KEY_PRIVATE_KEY=your_private_key
-OPENAI_API_KEY=your_openai_api_key
-```
-
-## Future Development
-
-- Integration with real-time security monitoring services
-- Support for more complex action sequences
-- Enhanced decision-making capabilities
-- Comprehensive logging and audit trails
-- Authentication for security actions
+We welcome contributions to the Horus security monitoring agent! Please see our [contributing guidelines](./docs/CONTRIBUTING.md) for more information.
 
 ## License
 
-[MIT License](LICENSE)
+This project is licensed under the MIT License - see the LICENSE file for details.

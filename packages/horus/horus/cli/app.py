@@ -4,11 +4,14 @@ Command-line interface for the Horus security monitoring agent.
 import argparse
 import logging
 import sys
+import os
 from typing import Dict, Any, Optional
+
+from openai import OpenAI
+from dotenv import load_dotenv
 
 from horus.agents.security_agent import SecurityAgent
 from horus.agents.twitter_agent import TwitterAgent
-from horus.mock.openai_client import MockOpenAI
 
 # Configure logging
 logging.basicConfig(level=logging.INFO, format='[%(asctime)s] %(message)s')
@@ -20,7 +23,11 @@ class HorusApp:
     
     def __init__(self):
         """Initialize the Horus app."""
-        self.openai_client = MockOpenAI()
+        # Load environment variables
+        load_dotenv()
+        
+        # Use real OpenAI client
+        self.openai_client = OpenAI(api_key=os.getenv("OPENAI_API_KEY"))
         self.security_agent = SecurityAgent(self.openai_client)
         self.twitter_agent = None
     

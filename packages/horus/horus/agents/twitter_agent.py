@@ -8,7 +8,6 @@ from threading import Thread, Event
 from typing import Dict, Any, List, Optional, Tuple
 
 from horus.mock.twitter_data import create_mock_tweets
-from horus.mock.openai_client import MockOpenAI
 
 # Configure logging
 logging.basicConfig(level=logging.INFO, format='[%(asctime)s] %(message)s')
@@ -25,13 +24,12 @@ class TwitterAgent:
         self.stop_event = Event()
         self.monitoring_thread = None
         
-        # Set mock environment variables
+        # Set mock environment variables for Twitter only
         os.environ["TWITTER_BEARER_TOKEN"] = "mock_bearer_token"
         os.environ["TWITTER_API_KEY"] = "mock_api_key"
         os.environ["TWITTER_API_SECRET"] = "mock_api_secret"
         os.environ["TWITTER_ACCESS_TOKEN"] = "mock_access_token"
         os.environ["TWITTER_ACCESS_TOKEN_SECRET"] = "mock_access_token_secret"
-        os.environ["OPENAI_API_KEY"] = "mock_openai_key"
         
         # Create mock tweets
         self.mock_tweets = create_mock_tweets()
@@ -44,8 +42,9 @@ class TwitterAgent:
         # Import the TwitterSecurityMonitor class
         from horus.twitter_monitor import TwitterSecurityMonitor
         
-        # Create a TwitterSecurityMonitor instance
-        twitter_monitor = TwitterSecurityMonitor(openai_client=MockOpenAI())
+        # Create a TwitterSecurityMonitor instance with the real OpenAI client
+        # passed from the SecurityAgent
+        twitter_monitor = TwitterSecurityMonitor(openai_client=self.security_agent.openai_client)
         
         # Override the get_latest_tweets method to use mock data
         twitter_monitor.get_latest_tweets = lambda account_id, max_results=10: self.mock_tweets
@@ -83,11 +82,15 @@ class TwitterAgent:
                             logger.info("--------------------------------------------------")
                             logger.info("Processing security alert from Twitter:")
                             logger.info(f"Alert preview: {alert[:100]}")
-                            logger.info(f"        \n        ...")
+                            if len(alert) > 100:
+                                logger.info(f"        \n        ...")
                             
                             # Process the security alert
-                            response = self.security_agent.process_security_alert(alert)
-                            logger.info(response)
+                            try:
+                                response = self.security_agent.process_security_alert(alert)
+                                logger.info(response)
+                            except Exception as e:
+                                logger.error(f"Error processing security alert: {str(e)}")
                             logger.info("--------------------------------------------------")
                     else:
                         logger.info("No security threats found.")

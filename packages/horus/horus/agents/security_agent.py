@@ -100,16 +100,97 @@ class SecurityAgent:
                     asset = parameters.get("asset", "unknown")
                     duration = parameters.get("duration", "24h")
                     
-                    logger.info(f"MONITOR TOOL CALLED: Monitoring {asset} for {duration}")
-                    result.append(f"Enhanced monitoring enabled for {asset} for the next {duration}.")
+                    logger.info(f"MONITOR TOOL CALLED: Enhanced monitoring for {asset} for the next {duration}")
+                    result.append(f"Enhanced monitoring activated for {asset} for the next {duration}.")
                 
                 else:
                     logger.warning(f"Unknown action type: {action_type}")
                     result.append(f"Unknown action: {action_type}")
             
-            # Return the result
-            return "Horus Response:\n" + "\n".join(result)
-        
+            return "\n".join(result)
+            
         except Exception as e:
             logger.error(f"Error processing security alert: {str(e)}")
+            
+            # For invalid API key or connection errors, use mock response
+            if "invalid_api_key" in str(e) or "connection" in str(e).lower():
+                logger.warning("Using mock response due to API key or connection issue")
+                mock_response = {
+                    "reasoning": "MOCK RESPONSE: This is a critical security vulnerability that requires immediate action.",
+                    "action_plan": [
+                        {
+                            "action": "withdrawal",
+                            "explanation": "Emergency withdrawal of funds to prevent loss",
+                            "parameters": {
+                                "token": "ETH",
+                                "amount": "ALL",
+                                "destination": "cold_wallet_1"
+                            }
+                        },
+                        {
+                            "action": "revoke",
+                            "explanation": "Revoke permissions to prevent further access",
+                            "parameters": {
+                                "token_address": "0x123456789...",
+                                "protocol": "Affected Protocol"
+                            }
+                        },
+                        {
+                            "action": "monitor",
+                            "explanation": "Monitor for additional suspicious activity",
+                            "parameters": {
+                                "asset": "All connected wallets",
+                                "duration": "72h"
+                            }
+                        }
+                    ]
+                }
+                
+                reasoning = mock_response.get("reasoning", "No reasoning provided.")
+                action_plan = mock_response.get("action_plan", [])
+                
+                logger.info(f"Mock Reasoning: {reasoning}")
+                
+                if not action_plan:
+                    return "No action needed (mock response)."
+                
+                logger.info(f"Mock Action plan contains {len(action_plan)} steps")
+                result = []
+                
+                for i, action in enumerate(action_plan):
+                    action_type = action.get("action")
+                    explanation = action.get("explanation")
+                    parameters = action.get("parameters", {})
+                    
+                    logger.info(f"Executing mock step {i+1}: {action_type}")
+                    logger.info(f"Mock Explanation: {explanation}")
+                    
+                    if action_type == "withdrawal":
+                        token = parameters.get("token", "unknown")
+                        amount = parameters.get("amount", "0")
+                        destination = parameters.get("destination", "unknown")
+                        
+                        logger.info(f"MOCK WITHDRAWAL TOOL CALLED: Withdrawing {amount} {token} to {destination}")
+                        result.append(f"[MOCK] Emergency withdrawal initiated: {amount} {token} to {destination}.")
+                    
+                    elif action_type == "revoke":
+                        token_address = parameters.get("token_address", "unknown")
+                        protocol = parameters.get("protocol", "unknown")
+                        
+                        logger.info(f"MOCK REVOKE TOOL CALLED: Revoking permissions for {token_address} on {protocol}")
+                        result.append(f"[MOCK] Permissions revoked for {token_address} on {protocol}.")
+                    
+                    elif action_type == "monitor":
+                        asset = parameters.get("asset", "unknown")
+                        duration = parameters.get("duration", "24h")
+                        
+                        logger.info(f"MOCK MONITOR TOOL CALLED: Enhanced monitoring for {asset} for the next {duration}")
+                        result.append(f"[MOCK] Enhanced monitoring activated for {asset} for the next {duration}.")
+                    
+                    else:
+                        logger.warning(f"Unknown mock action type: {action_type}")
+                        result.append(f"[MOCK] Unknown action: {action_type}")
+                
+                return "\n".join(result)
+            
             return f"Error processing security alert: {str(e)}"
