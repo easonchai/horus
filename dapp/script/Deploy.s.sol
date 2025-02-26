@@ -121,6 +121,30 @@ contract Deploy is Script {
             deadline: block.timestamp + 60 // deadline
         }));
 
+        // Deploy Beefy vaults for each pool
+        BeefyVault usdcUsdtVault = new BeefyVault(
+            "Beefy USDC-USDT LP",
+            "beefyUSDC-USDT",
+            0x27F971cb582BF9E50F397e4d29a5C7A34f11faA2
+        );
+
+        BeefyVault wbtcEigenVault = new BeefyVault(
+            "Beefy WBTC-EIGEN LP",
+            "beefyWBTC-EIGEN",
+            0x27F971cb582BF9E50F397e4d29a5C7A34f11faA2
+        );
+
+        BeefyVault usdcEigenVault = new BeefyVault(
+            "Beefy USDC-EIGEN LP",
+            "beefyUSDC-EIGEN",
+            0x27F971cb582BF9E50F397e4d29a5C7A34f11faA2
+        );
+
+        // Print deployed vault addresses
+        console.log("USDC-USDT Vault deployed at:", address(usdcUsdtVault));
+        console.log("WBTC-EIGEN Vault deployed at:", address(wbtcEigenVault));
+        console.log("USDC-EIGEN Vault deployed at:", address(usdcEigenVault));
+
         vm.stopBroadcast();
     }
 }
