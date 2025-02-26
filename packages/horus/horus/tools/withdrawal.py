@@ -2,73 +2,74 @@
 Withdrawal tool for the Horus security system.
 """
 import logging
-from typing import Dict, Any, List, Optional
+from typing import Dict, Any, List, Callable
 
-from .base import BaseTool
+from .base import create_tool
 
 # Configure logging
 logging.basicConfig(level=logging.INFO, format='[%(asctime)s] %(message)s')
 logger = logging.getLogger(__name__)
 
 
-class WithdrawalTool(BaseTool):
-    """Tool for handling token withdrawals."""
+def create_withdrawal_tool(dependency_graph: Dict[str, Any], user_balances: Dict[str, Any]) -> Callable[[Dict[str, Any]], str]:
+    """
+    Create a withdrawal tool function.
     
-    def __init__(self, dependency_graph: Dict[str, Any], user_balances: Dict[str, Any]):
+    Args:
+        dependency_graph: The dependency graph data.
+        user_balances: The user balance data.
+        
+    Returns:
+        A function that can be called to execute withdrawals.
+    """
+    def get_user_positions(user_address: str, chain_id: str) -> List[Dict[str, Any]]:
         """
-        Initialize the withdrawal tool.
+        Get positions for a user on a specific chain.
         
         Args:
-            dependency_graph: The dependency graph data.
-            user_balances: The user balance data.
-        """
-        self.dependency_graph = dependency_graph
-        self.user_balances = user_balances
-        
-    def get_exit_functions_for_token(self, token_symbol: str, chain_id: str) -> List[Dict[str, Any]]:
-        """
-        Get exit functions for a specific token on a specific chain.
-        
-        Args:
-            token_symbol: The symbol of the token.
+            user_address: The user's address.
             chain_id: The chain ID.
             
         Returns:
-            List of exit functions for the token.
+            A list of user positions.
         """
-        for dependency in self.dependency_graph.get("dependencies", []):
-            if dependency.get("derivativeSymbol") == token_symbol and dependency.get("chainId") == chain_id:
-                return dependency.get("exitFunctions", [])
-        return []
+        chain_id = str(chain_id)  # Ensure chain_id is a string
         
-    def get_user_positions(self, user_address: str, chain_id: str) -> List[Dict[str, Any]]:
+        if not user_balances:
+            logger.warning("User balances not loaded")
+            return []
+        
+        user_data = user_balances.get(user_address, {})
+        chain_data = user_data.get(chain_id, {})
+        return chain_data.get("positions", [])
+    
+    def get_exit_functions_for_token(token: str, chain_id: str) -> List[Dict[str, Any]]:
         """
-        Get user positions for a specific chain.
+        Get exit functions for a token on a specific chain.
         
         Args:
-            user_address: The user's wallet address.
+            token: The token symbol.
             chain_id: The chain ID.
             
         Returns:
-            List of user positions.
+            A list of exit functions.
         """
-        # Convert chain_id to string if it's not already
-        chain_id = str(chain_id)
+        chain_id = str(chain_id)  # Ensure chain_id is a string
         
-        logger.info(f"Looking for positions for user {user_address} on chain {chain_id}")
-        for user in self.user_balances.get("users", []):
-            if user.get("address") == user_address:
-                chain_balances = user.get("chainBalances", {})
-                if chain_id in chain_balances:
-                    positions = chain_balances[chain_id].get("positions", [])
-                    logger.info(f"Found {len(positions)} positions: {[p.get('symbol') for p in positions]}")
-                    return positions
-        logger.warning(f"No positions found for user {user_address} on chain {chain_id}")
+        if not dependency_graph:
+            logger.warning("Dependency graph not loaded")
+            return []
+        
+        # Find the token in the dependency graph
+        for node in dependency_graph.get("nodes", []):
+            if node.get("symbol") == token and str(node.get("chainId")) == chain_id:
+                return node.get("exitFunctions", [])
+        
         return []
     
-    def execute(self, parameters: Dict[str, Any]) -> str:
+    def execute_withdrawal(parameters: Dict[str, Any]) -> str:
         """
-        Execute a withdrawal based on the provided parameters.
+        Execute a withdrawal operation based on the provided parameters.
         
         Args:
             parameters: Dictionary containing withdrawal parameters:
@@ -76,7 +77,6 @@ class WithdrawalTool(BaseTool):
                 - amount: The amount to withdraw.
                 - destination: The destination for the withdrawn funds.
                 - chain_id: The chain ID.
-                - user_address: The user's wallet address.
                 
         Returns:
             A string describing the action taken.
@@ -91,7 +91,7 @@ class WithdrawalTool(BaseTool):
         logger.info(f"Full parameters: {parameters}")
         
         # Find positions for the token
-        positions = self.get_user_positions(user_address, chain_id)
+        positions = get_user_positions(user_address, chain_id)
         matching_positions = [p for p in positions if p.get("symbol") == token]
         
         if not matching_positions:
@@ -101,7 +101,7 @@ class WithdrawalTool(BaseTool):
         logger.info(f"Found {len(matching_positions)} matching positions for token {token}")
         
         # Get exit functions for the token
-        exit_functions = self.get_exit_functions_for_token(token, chain_id)
+        exit_functions = get_exit_functions_for_token(token, chain_id)
         
         if not exit_functions:
             logger.warning(f"No exit functions found for token {token}")
@@ -123,3 +123,10 @@ class WithdrawalTool(BaseTool):
         message += f"\nExecuted {contract_type}.{function_name} with token ID {token_id}."
         
         return message
+    
+    # Create and return the tool function
+    return create_tool("withdrawal", execute_withdrawal)
+
+
+# Create a default withdrawal tool for export
+withdrawal_tool = create_withdrawal_tool({}, {})

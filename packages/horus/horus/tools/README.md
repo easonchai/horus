@@ -1,63 +1,102 @@
 # Horus Security Tools
 
-This directory contains tools that can be used by the Horus security agent to perform various security actions.
+This package contains security tools used by the Horus security agent to protect user funds.
 
 ## Overview
 
-The tools in this directory are designed to be used by the Horus security agent to respond to security threats. Each tool implements a specific security action, such as withdrawing funds, revoking permissions, or monitoring assets.
+The tools in this package follow a functional programming approach, making them easy to test, compose, and extend.
 
 ## Tool Architecture
 
-All tools inherit from the base `BaseTool` class, which defines a common interface for all tools. The `BaseTool` class requires all tools to implement an `execute` method, which takes a dictionary of parameters and returns a string describing the action taken.
+Each tool is created using a factory function that returns a callable function:
+
+```
+create_tool(name, execute_fn) -> tool_function
+```
+
+The factory function takes a name and an execution function, and returns a tool function that can be called with parameters.
 
 ## Available Tools
 
-### WithdrawalTool
+### Withdrawal Tool
 
-The `WithdrawalTool` is used to withdraw funds from protocols in case of a security threat. It takes the following parameters:
-
-- `token`: The token to withdraw.
-- `amount`: The amount to withdraw.
-- `destination`: The destination for the withdrawn funds.
-- `chain_id`: The chain ID.
-
-### RevokeTool
-
-The `RevokeTool` is used to revoke permissions from protocols in case of a security threat. It takes the following parameters:
-
-- `token_address` or `token`: The token address or symbol to revoke permissions from.
-- `protocol`: The protocol to revoke permissions from.
-- `chain_id`: The chain ID.
-
-### MonitorTool
-
-The `MonitorTool` is used to monitor assets for suspicious activity in case of a security threat. It takes the following parameters:
-
-- `asset`: The asset to monitor.
-- `duration`: The duration to monitor for.
-
-## Adding New Tools
-
-To add a new tool, create a new file in this directory with a class that inherits from `BaseTool`. Implement the `execute` method to perform the desired action. Then, update the `__init__.py` file to import and expose your new tool.
-
-Example:
+The withdrawal tool is used to safely withdraw funds from compromised protocols.
 
 ```python
-from .base import BaseTool
+from horus.tools import create_withdrawal_tool
 
-class MyNewTool(BaseTool):
-    def execute(self, parameters):
-        # Your implementation here
-        return "Action completed successfully."
+# Create a withdrawal tool with dependencies
+withdrawal_tool = create_withdrawal_tool(dependency_graph, user_balances)
+
+# Use the tool
+result = withdrawal_tool({
+    "token": "USDC",
+    "amount": "ALL",
+    "destination": "safe_wallet",
+    "chain_id": "84532"
+})
+```
+
+### Revoke Tool
+
+The revoke tool is used to revoke permissions from compromised tokens or protocols.
+
+```python
+from horus.tools import create_revoke_tool
+
+# Create a revoke tool with dependencies
+revoke_tool = create_revoke_tool(tokens_config)
+
+# Use the tool
+result = revoke_tool({
+    "token": "USDC",
+    "protocol": "Compromised Protocol",
+    "chain_id": "84532"
+})
+```
+
+### Monitor Tool
+
+The monitor tool is used to enhance monitoring of assets during suspicious activity.
+
+```python
+from horus.tools import create_monitor_tool
+
+# Create a monitor tool
+monitor_tool = create_monitor_tool()
+
+# Use the tool
+result = monitor_tool({
+    "asset": "All Base Chain Positions",
+    "duration": "48h",
+    "threshold": "5%"
+})
+```
+
+## Creating Custom Tools
+
+You can create custom tools by using the `create_tool` function:
+
+```python
+from horus.tools.base import create_tool
+
+def execute_custom_action(parameters):
+    # Implement your custom action here
+    return "Custom action executed"
+
+# Create a custom tool
+custom_tool = create_tool("custom", execute_custom_action)
+
+# Use the custom tool
+result = custom_tool({"param1": "value1"})
 ```
 
 ## Testing
 
-You can test the tools using the `tests/test_security.py` script. Each tool has a dedicated test function that demonstrates how to use it.
-
-To run the tests:
+The tools can be tested using the test script in the `tests` directory:
 
 ```bash
-# Run from the project root
 python -m tests.test_security
 ```
+
+This will run tests for all the tools and the security agent.
