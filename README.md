@@ -4,18 +4,29 @@ Horus is a security monitoring tool that watches for threats and can automatical
 
 ## Table of Contents
 
-- [Prerequisites](#prerequisites)
-- [Installation Guide](#installation-guide)
-- [Installing mise](#installing-mise)
-- [Installing Poetry](#installing-poetry)
-- [Setting up the Project](#setting-up-the-project)
-- [Running the Application](#running-the-application)
-- [Development Commands](#development-commands)
-- [Troubleshooting](#troubleshooting)
+- [Horus Security Monitoring Agent](#horus-security-monitoring-agent)
+  - [Table of Contents](#table-of-contents)
+  - [Prerequisites](#prerequisites)
+  - [Installation Guide](#installation-guide)
+    - [Installing mise](#installing-mise)
+      - [macOS](#macos)
+      - [Linux/WSL](#linuxwsl)
+    - [Installing Poetry](#installing-poetry)
+      - [Install Poetry](#install-poetry)
+    - [Setting up the Project](#setting-up-the-project)
+  - [Running the Application](#running-the-application)
+  - [Development Commands](#development-commands)
+  - [Troubleshooting](#troubleshooting)
+    - [Common Issues](#common-issues)
+      - ["Command not found" after installation](#%22command-not-found%22-after-installation)
+      - [Node.js version conflicts](#nodejs-version-conflicts)
+      - [Python dependency issues](#python-dependency-issues)
+      - [Need to update pnpm](#need-to-update-pnpm)
 
 ## Prerequisites
 
 Before you begin, make sure you have:
+
 - A computer with macOS, Linux, or WSL on Windows
 - Basic familiarity with terminal/command line
 - Git installed (for cloning the repository)
@@ -76,7 +87,7 @@ Restart your terminal or run `source ~/.bashrc` (or `~/.zshrc`) to apply changes
 1. Clone the repository:
 
 ```bash
-git clone https://github.com/your-organization/horus.git
+git clone https://github.com/easonchai/horus.git
 cd horus
 ```
 
@@ -137,6 +148,7 @@ mise exec -- pnpm build
 #### "Command not found" after installation
 
 If you encounter "command not found" errors after installing mise or poetry:
+
 - Make sure you've added them to your PATH and restarted your terminal
 - Check installation logs for any errors
 - Try running with the full path (e.g., `~/.mise/bin/mise` or `~/.poetry/bin/poetry`)
@@ -144,6 +156,7 @@ If you encounter "command not found" errors after installing mise or poetry:
 #### Node.js version conflicts
 
 If you have issues with Node.js versions:
+
 ```bash
 # Verify mise is using the correct version
 mise exec -- node --version
@@ -153,6 +166,7 @@ mise exec -- node --version
 #### Python dependency issues
 
 If you encounter Python dependency issues:
+
 ```bash
 # Clean and reinstall dependencies
 mise exec -- poetry lock --no-update
@@ -162,6 +176,7 @@ mise exec -- poetry install
 #### Need to update pnpm
 
 If you need to update pnpm to the latest version:
+
 ```bash
 mise exec -- npm add -g pnpm@latest
 ```

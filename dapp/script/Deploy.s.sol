@@ -6,6 +6,7 @@ import {Script} from "forge-std/Script.sol";
 import {console} from "forge-std/console.sol";
 import {ERC20} from "@openzeppelin/contracts/token/ERC20/ERC20.sol";
 import {INonfungiblePositionManager} from "@uniswap/v3-periphery/contracts/interfaces/INonfungiblePositionManager.sol";
+import {BeefyVault} from "../src/BeefyVault.sol";
 
 contract MockToken is ERC20 {
     constructor(string memory name, string memory symbol) ERC20(name, symbol) {
@@ -31,10 +32,10 @@ contract Deploy is Script {
         MockToken eigen = new MockToken("Eigenlayer", "EIGEN");
 
         // Print deployed token addresses
-        console.log("USDC deployed at:", address(usdc));
-        console.log("USDT deployed at:", address(usdt));
-        console.log("WBTC deployed at:", address(wbtc));
-        console.log("EIGEN deployed at:", address(eigen));
+        console.log("USDC deployed at: %s", address(usdc));
+        console.log("USDT deployed at: %s", address(usdt));
+        console.log("WBTC deployed at: %s", address(wbtc));
+        console.log("EIGEN deployed at: %s", address(eigen));
 
         // Determine token order
         (address token0, address token1) = address(usdc) < address(usdt)
@@ -123,27 +124,27 @@ contract Deploy is Script {
 
         // Deploy Beefy vaults for each pool
         BeefyVault usdcUsdtVault = new BeefyVault(
+            INonfungiblePositionManager(0x27F971cb582BF9E50F397e4d29a5C7A34f11faA2),
             "Beefy USDC-USDT LP",
-            "beefyUSDC-USDT",
-            0x27F971cb582BF9E50F397e4d29a5C7A34f11faA2
+            "beefyUSDC-USDT"
         );
 
         BeefyVault wbtcEigenVault = new BeefyVault(
+            INonfungiblePositionManager(0x27F971cb582BF9E50F397e4d29a5C7A34f11faA2),
             "Beefy WBTC-EIGEN LP",
-            "beefyWBTC-EIGEN",
-            0x27F971cb582BF9E50F397e4d29a5C7A34f11faA2
+            "beefyWBTC-EIGEN"
         );
 
         BeefyVault usdcEigenVault = new BeefyVault(
+            INonfungiblePositionManager(0x27F971cb582BF9E50F397e4d29a5C7A34f11faA2),
             "Beefy USDC-EIGEN LP",
-            "beefyUSDC-EIGEN",
-            0x27F971cb582BF9E50F397e4d29a5C7A34f11faA2
+            "beefyUSDC-EIGEN"
         );
 
         // Print deployed vault addresses
-        console.log("USDC-USDT Vault deployed at:", address(usdcUsdtVault));
-        console.log("WBTC-EIGEN Vault deployed at:", address(wbtcEigenVault));
-        console.log("USDC-EIGEN Vault deployed at:", address(usdcEigenVault));
+        console.log("USDC-USDT Vault deployed at: %s", address(usdcUsdtVault));
+        console.log("WBTC-EIGEN Vault deployed at: %s", address(wbtcEigenVault));
+        console.log("USDC-EIGEN Vault deployed at: %s", address(usdcEigenVault));
 
         vm.stopBroadcast();
     }
