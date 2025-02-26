@@ -10,6 +10,7 @@ coinbase-agentkit = {version = "^0.1.4.dev202502250", allow-prereleases = true}
 coinbase-agentkit-langchain = {version = "^0.1.1.dev2025022120250221202502212", allow-prereleases = true}
 openai = "^1.64.0"
 python-dotenv = "^1.0.1"
+tweepy = "^4.14.0"
 
 [tool.poetry.group.dev.dependencies]
 pytest = "^8.0.0"
@@ -20,4 +21,5 @@ build-backend = "poetry.core.masonry.api"
 
 [tool.poetry.scripts]
 dev = "horus.main:main"
+dev-twitter-mock = "horus.main:main_twitter_mock"
 test = "horus.main:test_multi_action_scenario"

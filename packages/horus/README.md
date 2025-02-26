@@ -6,6 +6,7 @@ Horus is a security monitoring agent for cryptocurrency wallets that protects us
 
 - **Multi-Action Security Response**: Horus can execute multiple security actions in sequence based on the nature of the threat.
 - **Intelligent Threat Analysis**: Uses OpenAI to analyze security alerts and determine the best course of action.
+- **Twitter Security Monitoring**: Automatically monitors trusted Twitter accounts for cryptocurrency security threats and takes appropriate actions.
 - **Flexible Security Tools**:
   - **Revoke**: Revoke permissions for compromised tokens or protocols
   - **Swap**: Swap vulnerable tokens for safer alternatives
@@ -73,6 +74,44 @@ poetry run python horus/main.py
 # Using scripts
 poetry run dev  # Interactive mode
 poetry run test # Test scenario
+```
+
+## Documentation
+
+Detailed documentation for Horus features is available in the [docs](docs/) directory:
+
+- [Twitter Monitoring Process Flow](docs/twitter_monitoring_flow.md) - Detailed explanation of the Twitter monitoring feature
+- [Twitter Monitoring Diagram](docs/twitter_monitoring_diagram.md) - Visual diagram of the Twitter monitoring process flow
+
+Example scripts demonstrating Horus features are available in the [examples](examples/) directory:
+
+- [Twitter Monitor Demo](examples/twitter_monitor_demo.py) - Demonstrates the Twitter monitoring functionality
+
+## Twitter Security Monitoring
+
+Horus includes a Twitter monitoring feature that automatically scans tweets from trusted security accounts for cryptocurrency threats:
+
+```bash
+# Run with Twitter monitoring enabled
+poetry run python horus/main.py --twitter
+
+# Run with Twitter monitoring and custom check interval (in seconds)
+poetry run python horus/main.py --twitter --interval 300
+```
+
+The Twitter monitor:
+1. Fetches tweets from trusted security accounts
+2. Filters tweets for security relevance using keyword matching
+3. Analyzes filtered tweets with OpenAI to determine if they describe real security threats
+4. Formats and sends alerts to the Horus security agent for processing
+
+To use this feature, you need to set up Twitter API credentials in your `.env` file:
+```
+TWITTER_BEARER_TOKEN=your_bearer_token
+TWITTER_API_KEY=your_api_key
+TWITTER_API_SECRET=your_api_secret
+TWITTER_ACCESS_TOKEN=your_access_token
+TWITTER_ACCESS_TOKEN_SECRET=your_access_token_secret
 ```
 
 ## Example Security Alert

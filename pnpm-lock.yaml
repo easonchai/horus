@@ -4,10 +4,15 @@ settings:
   autoInstallPeers: true
   excludeLinksFromLockfile: false
 
-devDependencies:
-  turbo:
-    specifier: latest
-    version: 2.4.2
+importers:
+
+  .:
+    devDependencies:
+      turbo:
+        specifier: latest
+        version: 2.4.2
+
+  packages/horus: {}
 
 packages:
 

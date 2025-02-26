@@ -1,5 +1,9 @@
 import json
 import os
+import sys
+import argparse
+from datetime import datetime
+from threading import Thread, Event
 
 from dotenv import load_dotenv
 from openai import OpenAI
@@ -226,50 +230,279 @@ def process_security_alert(alert_message, agent_data):
     except Exception as e:
         return f"Error processing security alert: {str(e)}"
 
+def start_twitter_monitoring(agent_data, interval=300, stop_event=None):
+    """Start a background thread that monitors Twitter for security threats using mock data."""
+    if stop_event is None:
+        stop_event = Event()
+    
+    openai_client = agent_data["openai_client"]
+    
+    try:
+        # Import here to avoid circular imports
+        from horus.twitter_monitor import TwitterSecurityMonitor
+        
+        # Using mock mode for Twitter monitoring
+        print("Using mock Twitter monitoring mode")
+        
+        # Set mock environment variables
+        os.environ["TWITTER_BEARER_TOKEN"] = "mock_bearer_token"
+        os.environ["TWITTER_API_KEY"] = "mock_api_key"
+        os.environ["TWITTER_API_SECRET"] = "mock_api_secret"
+        os.environ["TWITTER_ACCESS_TOKEN"] = "mock_access_token"
+        os.environ["TWITTER_ACCESS_TOKEN_SECRET"] = "mock_access_token_secret"
+        os.environ["OPENAI_API_KEY"] = "mock_openai_key"
+        
+        # Create mock tweets
+        from examples.twitter_monitor_demo import create_mock_tweets, create_mock_openai_response, MockTweet
+        mock_tweets = create_mock_tweets()
+        
+        # Create a mock OpenAI client
+        class MockOpenAI:
+            def __init__(self, api_key=None):
+                pass
+            
+            class chat:
+                class completions:
+                    @staticmethod
+                    def create(model=None, messages=None, response_format=None):
+                        # Extract the tweet or security alert from the message
+                        tweet_text = ""
+                        for message in messages:
+                            if "Tweet: " in message["content"]:
+                                lines = message["content"].split("\n")
+                                for line in lines:
+                                    if line.strip().startswith("Tweet: "):
+                                        tweet_text = line.strip()[7:]  # Remove "Tweet: "
+                            elif message["role"] == "user":
+                                tweet_text = message["content"]
+                        
+                        # Check if this is a security alert analysis request
+                        is_alert_analysis = False
+                        for message in messages:
+                            if message["role"] == "system" and "You are Horus, a security monitoring agent" in message["content"]:
+                                is_alert_analysis = True
+                                break
+                        
+                        if is_alert_analysis:
+                            # Create an appropriate response for security alert analysis
+                            if "XYZ DeFi" in tweet_text or "critical vulnerability" in tweet_text.lower():
+                                mock_response = {
+                                    "reasoning": "The alert indicates a critical vulnerability in the XYZ DeFi protocol that allows funds to be drained. To protect the user's funds, we must immediately withdraw any assets held in the XYZ DeFi protocol to a secure address.",
+                                    "action_plan": [
+                                        {
+                                            "action": "withdrawal",
+                                            "explanation": "Withdraw all assets from the compromised XYZ DeFi protocol to prevent loss due to the vulnerability that allows attackers to drain funds.",
+                                            "parameters": {
+                                                "token": "all",
+                                                "amount": "all",
+                                                "destination": "safe_address_here"
+                                            }
+                                        }
+                                    ]
+                                }
+                            elif "Phishing" in tweet_text or "ABC Token" in tweet_text:
+                                mock_response = {
+                                    "reasoning": "The security alert indicates a phishing campaign targeting holders of the ABC Token. We should revoke permissions to protect user funds.",
+                                    "action_plan": [
+                                        {
+                                            "action": "revoke",
+                                            "explanation": "To protect users from unauthorized transactions initiated by attackers using stolen private keys, revoke current permissions to the ABC Token.",
+                                            "parameters": {
+                                                "token_address": "ADDRESS_OF_ABC_TOKEN",
+                                                "protocol": "ProtocolUsingABC"
+                                            }
+                                        }
+                                    ]
+                                }
+                            elif "SECURITY BREACH" in tweet_text or "wallets compromised" in tweet_text.lower() or "DEX platform" in tweet_text:
+                                mock_response = {
+                                    "reasoning": "Multiple wallets have been compromised on the DEX platform due to a smart contract exploit. We need to take immediate action to protect user funds.",
+                                    "action_plan": [
+                                        {
+                                            "action": "withdrawal",
+                                            "explanation": "Withdraw funds from the compromised DEX platform to prevent loss.",
+                                            "parameters": {
+                                                "token": "all",
+                                                "amount": "all",
+                                                "destination": "safe_wallet_address"
+                                            }
+                                        }
+                                    ]
+                                }
+                            else:
+                                mock_response = {
+                                    "reasoning": "This alert doesn't require immediate action.",
+                                    "action_plan": []
+                                }
+                            
+                            # Create a mock choice with the JSON response as a string
+                            class MockChoice:
+                                def __init__(self, content):
+                                    self.message = type('obj', (object,), {
+                                        'content': content
+                                    })
+                            
+                            return type('obj', (object,), {
+                                'choices': [MockChoice(json.dumps(mock_response))]
+                            })
+                        else:
+                            # This is a Twitter tweet analysis request
+                            # Find the corresponding mock tweet
+                            mock_tweet = None
+                            for tweet in mock_tweets:
+                                if tweet.text == tweet_text:
+                                    mock_tweet = tweet
+                                    break
+                            
+                            if not mock_tweet:
+                                mock_tweet = MockTweet(0, tweet_text)
+                            
+                            # Create a mock response
+                            mock_response = create_mock_openai_response(mock_tweet)
+                            
+                            class MockChoice:
+                                def __init__(self, content):
+                                    self.message = type('obj', (object,), {
+                                        'content': content
+                                    })
+                            
+                            return type('obj', (object,), {
+                                'choices': [MockChoice(json.dumps(mock_response))]
+                            })
+        
+        # Initialize the monitor with the mock OpenAI client
+        twitter_monitor = TwitterSecurityMonitor(openai_client=MockOpenAI())
+        
+        # Override the get_latest_tweets method to use mock data
+        twitter_monitor.get_latest_tweets = lambda account_id, max_results=10: mock_tweets
+
+        def monitoring_loop():
+            while not stop_event.is_set():
+                try:
+                    print(f"[{datetime.now()}] Checking Twitter for security threats...")
+                    alerts = twitter_monitor.check_all_sources()
+                    
+                    if alerts:
+                        print(f"Found {len(alerts)} potential security threats!")
+                        for alert in alerts:
+                            print("-" * 50)
+                            print("Processing security alert from Twitter:")
+                            print(f"Alert preview: {alert[:100]}...")
+                            response = process_security_alert(alert, agent_data)
+                            print("Horus Response:")
+                            print(response)
+                            print("-" * 50)
+                    else:
+                        print("No new security threats detected.")
+                    
+                    stop_event.wait(interval)
+                    
+                except Exception as e:
+                    print(f"Error in Twitter monitoring loop: {str(e)}")
+                    stop_event.wait(interval)
+        
+        monitor_thread = Thread(target=monitoring_loop, daemon=True)
+        monitor_thread.start()
+        
+        return {
+            "monitor_thread": monitor_thread,
+            "stop_event": stop_event
+        }
+        
+    except Exception as e:
+        print(f"Error starting Twitter monitoring: {str(e)}")
+        return None
+
 def main():
     """Main function to run the Horus security monitoring agent."""
-    print("Welcome to Horus - Crypto Security Monitoring Agent!")
+    print("Starting Horus Security Monitoring Agent...")
     
     # Set up the agent
     agent_data = setup_agent()
-    
     if not agent_data:
-        print("Failed to set up the agent. Exiting.")
+        print("Failed to set up agent. Exiting.")
         return
     
-    print("Agent is ready. You can start sending security alerts.")
-    print("Available actions: revoke, swap, withdrawal")
-    print("Type 'exit' to quit.")
+    # Check if Twitter monitoring is enabled
+    parser = argparse.ArgumentParser(description="Horus - Crypto Security Monitoring Agent")
+    parser.add_argument("--interval", type=int, default=300, help="Twitter monitoring interval in seconds")
     
-    # Simple chat loop
-    while True:
-        try:
-            # Clear separator to avoid confusion
-            print("\n" + "-" * 50)
-            alert_message = input("Security Alert: ")
+    args, _ = parser.parse_known_args()
+    
+    twitter_monitoring = None
+    print(f"Starting Twitter monitoring (interval: {args.interval} seconds)...")
+    twitter_monitoring = start_twitter_monitoring(agent_data, interval=args.interval)
+    if twitter_monitoring:
+        print("Twitter monitoring started successfully.")
+    else:
+        print("Failed to start Twitter monitoring.")
+    
+    try:
+        print("\nEnter a security alert message (or type 'exit' to quit):")
+        while True:
+            user_input = input("> ")
             
-            # Strip any leading/trailing whitespace
-            alert_message = alert_message.strip()
-            
-            if not alert_message:
-                print("Please enter a security alert or type 'exit' to quit.")
-                continue
-                
-            if alert_message.lower() == 'exit':
-                print("Shutting down security monitoring.")
+            if user_input.lower() == 'exit':
                 break
             
-            # Process the alert and get the response
-            response = process_security_alert(alert_message, agent_data)
+            if not user_input.strip():
+                continue
             
-            # Display the response with clear formatting
-            print("\n" + "-" * 50)
-            print("Horus Response:")
+            response = process_security_alert(user_input, agent_data)
+            print("\nHorus Response:")
             print(response)
+            print("\nEnter another security alert (or type 'exit' to quit):")
+    
+    except KeyboardInterrupt:
+        print("\nExiting Horus Security Monitoring Agent...")
+    
+    finally:
+        # Stop Twitter monitoring if it was started
+        if twitter_monitoring:
+            twitter_monitoring["stop_event"].set()
+            print("Stopping Twitter monitoring...")
+
+def main_twitter_mock():
+    """Main function to run the Horus security monitoring agent with Twitter monitoring in mock mode."""
+    print("Starting Horus Security Monitoring Agent with Twitter monitoring in mock mode...")
+    
+    # Set up the agent
+    agent_data = setup_agent()
+    if not agent_data:
+        print("Failed to set up agent. Exiting.")
+        return
+    
+    # Start Twitter monitoring with mock mode
+    twitter_monitoring = start_twitter_monitoring(agent_data, interval=300)
+    if twitter_monitoring:
+        print("Twitter monitoring started successfully in mock mode.")
+    else:
+        print("Failed to start Twitter monitoring.")
+    
+    try:
+        print("\nEnter a security alert message (or type 'exit' to quit):")
+        while True:
+            user_input = input("> ")
             
-        except Exception as e:
-            print(f"\nError: {str(e)}")
-            print("Please try again with a different security alert.")
+            if user_input.lower() == 'exit':
+                break
+            
+            if not user_input.strip():
+                continue
+            
+            response = process_security_alert(user_input, agent_data)
+            print("\nHorus Response:")
+            print(response)
+            print("\nEnter another security alert (or type 'exit' to quit):")
+    
+    except KeyboardInterrupt:
+        print("\nExiting Horus Security Monitoring Agent...")
+    
+    finally:
+        # Stop Twitter monitoring if it was started
+        if twitter_monitoring:
+            twitter_monitoring["stop_event"].set()
+            print("Stopping Twitter monitoring...")
 
 def test_multi_action_scenario():
     """
@@ -305,13 +538,13 @@ def test_multi_action_scenario():
         print(f"\nError during test: {str(e)}")
 
 if __name__ == "__main__":
-    # Comment out the direct function calls
-    # test_multi_action_scenario()
-    # main()
-
     # Use command line arguments to choose the mode
-    import sys
-    if len(sys.argv) > 1 and sys.argv[1] == "--test":
+    parser = argparse.ArgumentParser(description="Horus - Crypto Security Monitoring Agent")
+    parser.add_argument("--test", action="store_true", help="Run the test scenario")
+    
+    args = parser.parse_args()
+    
+    if args.test:
         test_multi_action_scenario()
     else:
         main()

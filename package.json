@@ -5,10 +5,11 @@
     "packages/*"
   ],
   "scripts": {
-    "dev": "cd packages/horus && poetry run dev",
-    "build": "cd packages/horus && poetry build",
-    "lint": "cd packages/horus && poetry run pylint horus",
-    "test": "cd packages/horus && poetry run pytest",
+    "dev": "turbo run dev",
+    "dev:original": "turbo run dev:original",
+    "build": "turbo run build",
+    "lint": "turbo run lint",
+    "test": "turbo run test",
     "install": "cd packages/horus && poetry install",
     "update-deps": "cd packages/horus && poetry update",
     "install-coinbase": "cd packages/horus && poetry add coinbase-agentkit@latest coinbase-agentkit-langchain@latest --allow-prereleases"

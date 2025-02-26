@@ -1,0 +1,12 @@
+{
+  "name": "horus",
+  "version": "0.1.0",
+  "private": true,
+  "scripts": {
+    "dev": "poetry run python horus/main.py",
+    "dev:original": "poetry run dev",
+    "build": "poetry build",
+    "lint": "poetry run pylint horus",
+    "test": "poetry run pytest"
+  }
+}
