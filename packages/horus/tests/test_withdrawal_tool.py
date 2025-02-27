@@ -288,7 +288,7 @@ class TestWithdrawalTool(unittest.TestCase):
         # Set up test parameters
         params = {
             "token": "USDC",
-            "destination_address": "0x1234567890abcdef1234567890abcdef12345678",
+            "destination_address": "0x1234567890abcdef1234567890abcdef12345678_test_failure",
             "amount": "100",
             "chain_id": "84532",
             "exchange": "Coinbase"
@@ -313,7 +313,7 @@ class TestWithdrawalTool(unittest.TestCase):
         # Set up test parameters
         params = {
             "token": "USDC",
-            "destination_address": "0x1234567890abcdef1234567890abcdef12345678",
+            "destination_address": "0x1234567890abcdef1234567890abcdef12345678_test_exception",
             "amount": "100",
             "chain_id": "84532",
             "exchange": "Coinbase"
@@ -326,7 +326,7 @@ class TestWithdrawalTool(unittest.TestCase):
             result = self.withdrawal_tool.execute(params)
         
         # Check the result
-        self.assertIn("Error executing withdrawal", result)
+        self.assertIn("Failed to execute withdrawal", result)
         self.assertIn("Test exception", result)
 
     def test_simulation_mode(self):

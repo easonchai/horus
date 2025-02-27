@@ -34,11 +34,11 @@ class SecurityAgent:
     def __init__(self, openai_client, mock_openai=False, mock_twitter=True):
         """
         Initialize the security agent.
-        
-        Args:
-            openai_client: The OpenAI client.
-            mock_openai: Whether to mock OpenAI responses.
-            mock_twitter: Whether to mock Twitter responses.
+    
+    Args:
+        openai_client: The OpenAI client.
+        mock_openai: Whether to mock OpenAI responses.
+        mock_twitter: Whether to mock Twitter responses.
         """
         self.openai_client = openai_client
         self.mock_openai = mock_openai
@@ -308,7 +308,7 @@ class SecurityAgent:
         """
         Get the default monitoring action parameters.
         
-        Returns:
+    Returns:
             A tuple of ("monitor", default_parameters).
         """
         parameters = {

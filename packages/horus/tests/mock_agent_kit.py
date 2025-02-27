@@ -55,6 +55,22 @@ class CdpActionProvider:
     
     def execute_action(self, action):
         """Simulate executing an action."""
+        # Check if this is a special test case that should fail
+        if action.get("params", {}).get("test_failure", False):
+            return ActionResult(
+                ActionStatus.ERROR,
+                None,
+                "API Error: Rate limit exceeded"
+            )
+        
+        # Check if this is a special test case that should raise an exception
+        if action.get("params", {}).get("test_exception", False):
+            raise Exception("Test exception")
+        
+        # Check if this is a wallet failure test
+        if action.get("params", {}).get("wallet_failure", False):
+            raise ValueError("Failed to initialize wallet")
+            
         # Default successful response
         if action["type"] == "revokeAllowance":
             return ActionResult(
