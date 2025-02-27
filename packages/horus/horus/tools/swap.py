@@ -27,6 +27,8 @@ import os
 from typing import Any, Dict, List, Optional, Tuple, Union
 
 from .base import create_tool
+from .constants import (DEFAULT_BLOCK_EXPLORERS, DEFAULT_CHAIN_ID,
+                        DEFAULT_FEE_TIER, DEFAULT_SLIPPAGE)
 
 # Configure logging
 logging.basicConfig(level=logging.INFO, format='[%(asctime)s] %(message)s')
@@ -35,17 +37,8 @@ logger = logging.getLogger(__name__)
 # -----------------------------------------------------------------------------
 # Constants
 # -----------------------------------------------------------------------------
-# Default fee tier for Uniswap V3 (0.3%)
-DEFAULT_FEE_TIER = 3000
-
 # Common fee tiers for Uniswap V3
 UNISWAP_V3_FEE_TIERS = [500, 3000, 10000]  # 0.05%, 0.3%, 1%
-
-# Default chain ID (Base Goerli testnet)
-DEFAULT_CHAIN_ID = "84532"
-
-# Default slippage percentage (higher for testnets due to volatility)
-DEFAULT_SLIPPAGE = 1.0
 
 # Price ratios for common token pairs (for estimation only)
 # Values adjusted for testnet environments where prices may differ from mainnet
@@ -58,9 +51,6 @@ PRICE_RATIOS = {
     "wbtc:eth": 22.2,    # 1 WBTC = 22.2 ETH
     "usdt:usdc": 1,      # 1 USDT = 1 USDC
     "usdc:usdt": 1,      # 1 USDC = 1 USDT
-    # Testnet tokens
-    "test:usdc": 0.5,    # Example testnet ratio
-    "eigen:eth": 0.01,   # Example testnet ratio
 }
 
 # Chain ID to default DEX mapping
@@ -134,7 +124,7 @@ try:
     from coinbase_agentkit.types import ActionResult, ActionStatus
     AGENTKIT_AVAILABLE = True
 except ImportError:
-    logger.warning("Coinbase AgentKit not available. Using mock implementation.")
+    logger.warning("Coinbase AgentKit not available. Using simulation mode.")
     AGENTKIT_AVAILABLE = False
     
     # Create mock classes for testing
@@ -145,12 +135,11 @@ except ImportError:
     class MockActionResult:
         def __init__(self, status="SUCCESS", transaction_hash="0xabcdef1234567890", message="Mock transaction successful"):
             self.status = status
-            self.transaction_hash = transaction_hash
-            self.message = message
-    
-    # Create mock modules
-    ActionStatus = MockActionStatus()
-    ActionResult = MockActionResult
+            self.result = {
+                "transactionHash": transaction_hash,
+                "message": message
+            }
+            self.error = None if status == "SUCCESS" else "Test error"
 
 
 class SwapTool:

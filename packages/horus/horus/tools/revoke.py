@@ -16,6 +16,7 @@ from coinbase_agentkit.action_providers.cdp.cdp_wallet_provider import \
 from coinbase_agentkit.types import ActionResult, ActionStatus
 
 from .base import BaseTool
+from .constants import DEFAULT_BLOCK_EXPLORERS, DEFAULT_CHAIN_ID
 
 # Configure logging
 logging.basicConfig(level=logging.INFO, format='[%(asctime)s] %(message)s')
@@ -75,18 +76,7 @@ class RevokeTool(BaseTool):
         ```
     """
     
-    # Class constants
-    DEFAULT_CHAIN_ID = "84532"  # Base Sepolia Testnet
-    
-    # Default block explorer URLs by chain ID in case they're not in the config
-    DEFAULT_BLOCK_EXPLORERS = {
-        "1": "https://etherscan.io/tx/{}",           # Ethereum Mainnet
-        "84532": "https://sepolia.basescan.org/tx/{}", # Base Sepolia Testnet
-        "8453": "https://basescan.org/tx/{}",        # Base Mainnet
-        "42161": "https://arbiscan.io/tx/{}",        # Arbitrum One
-        "10": "https://optimistic.etherscan.io/tx/{}", # Optimism
-        "137": "https://polygonscan.com/tx/{}",      # Polygon
-    }
+    # Class constants - use imported constants
     
     def __init__(self, tokens_config: Dict[str, Any], protocols_config: Optional[Dict[str, Any]] = None):
         """
@@ -144,7 +134,7 @@ class RevokeTool(BaseTool):
             A dictionary mapping chain IDs to block explorer URL templates.
         """
         # Start with default explorers
-        explorers = self.DEFAULT_BLOCK_EXPLORERS.copy()
+        explorers = DEFAULT_BLOCK_EXPLORERS.copy()
         
         # Try to extract explorer URLs from protocols config
         # This is a simplistic approach - in a real implementation, you might
@@ -176,8 +166,8 @@ class RevokeTool(BaseTool):
                 chain_ids.add(chain_id)
                 
         # Look for the DEFAULT_CHAIN_ID in the available chains
-        if self.DEFAULT_CHAIN_ID in chain_ids:
-            return self.DEFAULT_CHAIN_ID
+        if DEFAULT_CHAIN_ID in chain_ids:
+            return DEFAULT_CHAIN_ID
             
         # If the default is not available, use the first chain ID from the config
         if chain_ids:
@@ -186,7 +176,7 @@ class RevokeTool(BaseTool):
             return default_chain
             
         # Fall back to the hardcoded default
-        return self.DEFAULT_CHAIN_ID
+        return DEFAULT_CHAIN_ID
     
     def get_token_address(self, token_symbol: str, chain_id: str) -> str:
         """

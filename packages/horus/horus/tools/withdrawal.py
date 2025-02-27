@@ -7,6 +7,7 @@ import os
 from typing import Any, Dict, List, Optional
 
 from .base import create_tool
+from .constants import DEFAULT_BLOCK_EXPLORERS, DEFAULT_CHAIN_ID
 
 # Configure logging
 logging.basicConfig(level=logging.INFO, format='[%(asctime)s] %(message)s')
@@ -312,7 +313,7 @@ class WithdrawalTool:
         token = parameters.get("token", "unknown")
         amount = parameters.get("amount", "0")
         destination = parameters.get("destination", "unknown")
-        chain_id = str(parameters.get("chain_id", "84532"))  # Default to Base, ensure it's a string
+        chain_id = str(parameters.get("chain_id", DEFAULT_CHAIN_ID))  # Use the imported default chain ID
         user_address = parameters.get("user_address", "0xf39Fd6e51aad88F6F4ce6aB8827279cffFb92266")  # Default user
         
         logger.info(f"Executing withdrawal for token {token} on chain {chain_id} for user {user_address}")
