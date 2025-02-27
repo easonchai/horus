@@ -10,6 +10,7 @@ from typing import Any, Callable, Dict, List, Optional, Tuple
 
 from horus.tools import create_monitor_tool
 from horus.tools.revoke import RevokeTool
+from horus.tools.swap import SwapTool
 from horus.tools.withdrawal import WithdrawalTool
 
 # Configure logging
@@ -25,6 +26,7 @@ class SecurityAgent:
     - Withdrawing funds to a safe address
     - Revoking token permissions
     - Setting up monitoring for specific assets
+    - Swapping tokens for safer assets
     
     It uses AI to determine the appropriate response to security alerts.
     """
@@ -51,6 +53,7 @@ class SecurityAgent:
         # Initialize tools
         self.withdrawal_tool = WithdrawalTool(self.dependency_graph, self.user_balances, self.protocols_config)
         self.revoke_tool = RevokeTool(self.tokens_config, self.protocols_config)
+        self.swap_tool = SwapTool(self.tokens_config, self.protocols_config, self.dependency_graph)
         self.monitor_tool = create_monitor_tool()
     
     def __call__(self, alert_text: str) -> str:
@@ -365,6 +368,20 @@ class SecurityAgent:
                 "chain_id": chain_id
             }
         
+        # Check for swap action
+        elif "swap" in response_lower or "convert" in response_lower or "exchange" in response_lower:
+            token_in = self._extract_parameter(response_text, "token_in", "unknown")
+            token_out = self._extract_parameter(response_text, "token_out", "USDC")
+            amount_in = self._extract_parameter(response_text, "amount_in", "all")
+            chain_id = self._extract_parameter(response_text, "chain_id", "1")
+            
+            return "swap", {
+                "token_in": token_in,
+                "token_out": token_out,
+                "amount_in": amount_in,
+                "chain_id": chain_id
+            }
+        
         # Check for revoke action
         elif "revoke" in response_lower or "permissions" in response_lower or "approval" in response_lower:
             token = self._extract_parameter(response_text, "token", "unknown")
@@ -441,6 +458,15 @@ class SecurityAgent:
             }
             return self.withdrawal_tool(parameters)
             
+        elif "swap" in alert_lower or "convert" in alert_lower:
+            parameters = {
+                "token_in": "ETH",
+                "token_out": "USDC",
+                "amount_in": "1.0",
+                "chain_id": "84532"  # Base chain
+            }
+            return self.swap_tool(parameters)
+            
         elif "revoke" in alert_lower or "permissions" in alert_lower:
             parameters = {
                 "token": "USDC",
@@ -496,6 +522,8 @@ class SecurityAgent:
             # Take the appropriate action
             if action_type == "withdrawal":
                 return self.withdrawal_tool(parameters)
+            elif action_type == "swap":
+                return self.swap_tool(parameters)
             elif action_type == "revoke":
                 return self.revoke_tool(parameters)
             elif action_type == "monitor":

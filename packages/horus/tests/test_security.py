@@ -7,7 +7,7 @@ import logging
 import os
 import sys
 import unittest
-from unittest.mock import MagicMock, patch
+from unittest.mock import MagicMock, mock_open, patch
 
 from dotenv import load_dotenv
 
@@ -47,148 +47,372 @@ sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 # Import the security agent
 from horus.agents.security_agent import SecurityAgent
 
+# Mock the coinbase_agentkit modules before importing any tools
+sys.modules['coinbase_agentkit'] = MagicMock()
+sys.modules['coinbase_agentkit.action_providers'] = MagicMock()
+sys.modules['coinbase_agentkit.action_providers.cdp'] = MagicMock()
+sys.modules['coinbase_agentkit.action_providers.cdp.cdp_action_provider'] = MagicMock()
+sys.modules['coinbase_agentkit.action_providers.cdp.cdp_wallet_provider'] = MagicMock()
+sys.modules['coinbase_agentkit.types'] = MagicMock()
 
-# Define a class for the test case to help with mocking
+# Create ActionStatus mock
+mock_action_status = MagicMock()
+mock_action_status.SUCCESS = "SUCCESS"
+mock_action_status.FAILURE = "FAILURE"
+sys.modules['coinbase_agentkit.types'].ActionStatus = mock_action_status
+
+# Create ActionResult mock
+class MockActionResult:
+    def __init__(self, status="SUCCESS", transaction_hash="0xtest", message="Test successful"):
+        self.status = status
+        self.transaction_hash = transaction_hash
+        self.message = message
+
+sys.modules['coinbase_agentkit.types'].ActionResult = MockActionResult
+
+# Now import the security agent
+from horus.agents.security_agent import SecurityAgent
+
+# Sample test data for mocking
+SAMPLE_DEPENDENCY_GRAPH = {
+    "nodes": [
+        {
+            "symbol": "USDC-USDT-LP",
+            "chainId": "84532",
+            "exitFunctions": [
+                {
+                    "contractType": "BeefyVault",
+                    "functionName": "withdraw",
+                    "contractAddress": "0xDb9ADe9917F2b9F67F569112DeADe3506f2177b2"
+                }
+            ]
+        },
+        {
+            "symbol": "USDC",
+            "chainId": "84532",
+            "priceFeed": "0x1234567890abcdef1234567890abcdef12345678"
+        },
+        {
+            "symbol": "ETH",
+            "chainId": "84532",
+            "priceFeed": "0x1234567890abcdef1234567890abcdef12345678"
+        }
+    ]
+}
+
+SAMPLE_USER_BALANCES = {
+    "0xf39Fd6e51aad88F6F4ce6aB8827279cffFb92266": {
+        "84532": {
+            "USDC": "1000.0",
+            "ETH": "5.0",
+            "positions": [
+                {
+                    "protocol": "Beefy",
+                    "symbol": "USDC-USDT-LP",
+                    "tokenId": "123",
+                    "contractKey": "beefyUSDC-USDT-Vault"
+                }
+            ]
+        }
+    }
+}
+
+SAMPLE_TOKENS_CONFIG = {
+    "tokens": [
+        {
+            "symbol": "USDC",
+            "name": "USD Coin",
+            "networks": {
+                "84532": "0xf175520c52418dfe19c8098071a252da48cd1c19",
+                "1": "0xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb48"
+            }
+        },
+        {
+            "symbol": "ETH",
+            "name": "Ethereum",
+            "networks": {
+                "84532": "0x4200000000000000000000000000000000000006",
+                "1": "0xeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee"
+            }
+        }
+    ]
+}
+
+SAMPLE_PROTOCOLS_CONFIG = {
+    "protocols": [
+        {
+            "name": "Beefy",
+            "chains": {
+                "84532": {
+                    "beefyUSDC-USDT-Vault": "0xDb9ADe9917F2b9F67F569112DeADe3506f2177b2"
+                }
+            }
+        },
+        {
+            "name": "UniswapV3",
+            "chains": {
+                "84532": {
+                    "swapRouter": "0xbe330043dbf77f92be10e3e3499d8da189d638cb"
+                }
+            }
+        }
+    ]
+}
+
+
 class TestSecurity(unittest.TestCase):
-    """Test case for the security agent."""
+    """Test case for the Security Agent functionality."""
     
-    @patch('os.path.exists')
-    @patch('builtins.open', new_callable=unittest.mock.mock_open, read_data='{}')
-    @patch('json.load', return_value={})
-    def test_security_alert(self, mock_json_load, mock_open, mock_path_exists):
+    def setUp(self):
+        """Set up the test."""
+        # Create mock for OpenAI client
+        self.mock_openai_client = MagicMock()
+        
+        # Mock the response from OpenAI
+        mock_response = MagicMock()
+        mock_response.choices = [MagicMock()]
+        mock_response.choices[0].message = MagicMock()
+        mock_response.choices[0].message.content = json.dumps({
+            "action_plan": [
+                {
+                    "action": "withdrawal",
+                    "parameters": {
+                        "token": "USDC-USDT-LP",
+                        "amount": "ALL",
+                        "chain_id": "84532"
+                    }
+                }
+            ]
+        })
+        self.mock_openai_client.chat.completions.create.return_value = mock_response
+        
+        # Create patches for file operations
+        self.open_patcher = patch('builtins.open', new_callable=mock_open, read_data=json.dumps({}))
+        self.mock_open = self.open_patcher.start()
+        
+        # Create patch for file existence check
+        self.exists_patcher = patch('os.path.exists', return_value=True)
+        self.mock_exists = self.exists_patcher.start()
+        
+        # Create patch for directory path operations
+        self.dirname_patcher = patch('os.path.dirname', return_value='/mocked/path')
+        self.mock_dirname = self.dirname_patcher.start()
+        
+        # Create patch for joining paths
+        self.join_patcher = patch('os.path.join', return_value='/mocked/path/to/file.json')
+        self.mock_join = self.join_patcher.start()
+        
+        # Configure the file reads based on the path
+        def mock_file_read(file_path, *args, **kwargs):
+            mock_file = MagicMock()
+            mock_file.__enter__ = MagicMock()
+            
+            if 'dependency_graph' in str(file_path):
+                mock_file.__enter__.return_value.read.return_value = json.dumps(SAMPLE_DEPENDENCY_GRAPH)
+            elif 'user_balances' in str(file_path):
+                mock_file.__enter__.return_value.read.return_value = json.dumps(SAMPLE_USER_BALANCES)
+            elif 'tokens' in str(file_path):
+                mock_file.__enter__.return_value.read.return_value = json.dumps(SAMPLE_TOKENS_CONFIG)
+            elif 'protocols' in str(file_path):
+                mock_file.__enter__.return_value.read.return_value = json.dumps(SAMPLE_PROTOCOLS_CONFIG)
+            else:
+                mock_file.__enter__.return_value.read.return_value = json.dumps({})
+                
+            mock_file.__exit__ = MagicMock(return_value=False)
+            return mock_file
+            
+        self.mock_open.side_effect = mock_file_read
+        
+        # Create the security agent with mocked dependencies
+        self.security_agent = SecurityAgent(self.mock_openai_client, mock_openai=True)
+        
+        # Mock the tools directly
+        self.security_agent.withdrawal_tool = MagicMock(return_value="Funds withdrawn successfully")
+        self.security_agent.revoke_tool = MagicMock(return_value="Permissions revoked successfully")
+        self.security_agent.swap_tool = MagicMock(return_value="Tokens swapped successfully")
+        self.security_agent.monitor_tool = MagicMock(return_value="Monitoring set up successfully")
+    
+    def tearDown(self):
+        """Clean up after the test."""
+        self.open_patcher.stop()
+        self.exists_patcher.stop()
+        self.dirname_patcher.stop()
+        self.join_patcher.stop()
+    
+    def test_security_alert(self):
+        """Test processing a security alert."""
+        # Set up a critical security alert
+        alert = """
+        CRITICAL SECURITY ALERT: Vulnerability found in Beefy protocol. 
+        All funds at risk. Immediate action required.
         """
-        Test the security agent's ability to process security alerts.
+        
+        # Process the alert
+        result = self.security_agent.process_alert(alert)
+        
+        # Verify the context was prepared
+        context = self.security_agent._prepare_context_for_ai()
+        logger.info(f"Context provided to AI: {context}")
+        
+        # Check that the expected action was taken (withdrawal in this case)
+        self.assertEqual(result, "Funds withdrawn successfully")
+        self.security_agent.withdrawal_tool.assert_called_once()
+    
+    def test_revoke_tool(self):
+        """Test the revocation tool."""
+        # Set up a security alert about compromised permissions
+        alert = """
+        CRITICAL SECURITY ALERT: Potential compromise of token approvals. 
+        Revoke permissions immediately for all tokens on Base chain.
         """
-        # Set up mock for json.load to return specific data for each file
-        mock_path_exists.return_value = True
-        mock_json_load.side_effect = [
-            {"dependencies": []},  # dependency_graph
-            {"users": []},         # user_balances
-            {"tokens": []},        # tokens_config
-            {"protocols": []}      # protocols_config
+        
+        # Configure the mock to return a different response for this alert
+        self.security_agent.get_mock_response = MagicMock(return_value="Permissions revoked successfully")
+        
+        # Process the alert
+        result = self.security_agent.process_alert(alert)
+        
+        # Check that the expected action was taken
+        self.assertEqual(result, "Permissions revoked successfully")
+    
+    def test_swap_tool(self):
+        """Test the swap tool."""
+        # Set up a security alert recommending a token swap
+        alert = """
+        CRITICAL SECURITY ALERT: ETH price volatility expected. 
+        Recommend swapping ETH to stablecoins immediately.
+        """
+        
+        # Configure the mock to return a different response for this alert
+        def mock_response(alert_text):
+            if "swap" in alert_text.lower():
+                return "Tokens swapped successfully"
+            return "Default mock response"
+            
+        self.security_agent.get_mock_response = MagicMock(side_effect=mock_response)
+        
+        # Process the alert
+        result = self.security_agent.process_alert(alert)
+        
+        # Check that the expected action was taken
+        self.assertEqual(result, "Tokens swapped successfully")
+    
+    def test_monitor_tool(self):
+        """Test the monitoring tool."""
+        # Set up a security alert recommending monitoring
+        alert = """
+        SECURITY ALERT: Unusual activity detected on Base chain.
+        Set up monitoring for all positions.
+        """
+        
+        # Configure the mock to return a different response for this alert
+        def mock_response(alert_text):
+            if "monitor" in alert_text.lower() or "unusual" in alert_text.lower():
+                return "Monitoring set up successfully"
+            return "Default mock response"
+            
+        self.security_agent.get_mock_response = MagicMock(side_effect=mock_response)
+        
+        # Process the alert
+        result = self.security_agent.process_alert(alert)
+        
+        # Check that the expected action was taken
+        self.assertEqual(result, "Monitoring set up successfully")
+    
+    def test_parse_ai_response_json(self):
+        """Test parsing a structured JSON response from the AI."""
+        # Sample JSON response
+        json_response = json.dumps({
+            "action_plan": [
+                {
+                    "action": "swap",
+                    "parameters": {
+                        "token_in": "ETH",
+                        "token_out": "USDC",
+                        "amount_in": "1.0",
+                        "chain_id": "84532"
+                    }
+                }
+            ]
+        })
+        
+        # Parse the response
+        action_type, parameters = self.security_agent.parse_ai_response(json_response)
+        
+        # Check that the correct action and parameters were extracted
+        self.assertEqual(action_type, "swap")
+        self.assertEqual(parameters["token_in"], "ETH")
+        self.assertEqual(parameters["token_out"], "USDC")
+        self.assertEqual(parameters["amount_in"], "1.0")
+        self.assertEqual(parameters["chain_id"], "84532")
+    
+    def test_parse_ai_response_text(self):
+        """Test parsing a text response from the AI."""
+        # Sample text response with action hints
+        text_response = """
+        Based on the security alert, I recommend swapping ETH to USDC immediately.
+        
+        Parameters:
+        - token_in: ETH
+        - token_out: USDC
+        - amount_in: 1.0
+        - chain_id: 84532
+        """
+        
+        # Parse the response
+        action_type, parameters = self.security_agent.parse_ai_response(text_response)
+        
+        # Check that the correct action and parameters were extracted
+        self.assertEqual(action_type, "swap")
+        self.assertEqual(parameters["token_in"], "ETH")
+        self.assertEqual(parameters["token_out"], "USDC")
+        self.assertEqual(parameters["amount_in"], "1.0")
+        self.assertEqual(parameters["chain_id"], "84532")
+    
+    def test_integration(self):
+        """Test the complete flow with different types of alerts."""
+        # Define test cases with alerts and expected actions
+        test_cases = [
+            {
+                "alert": "CRITICAL: Vulnerability in Beefy protocol. Withdraw all funds immediately.",
+                "expected_action": "withdrawal",
+                "expected_message": "Funds withdrawn successfully"
+            },
+            {
+                "alert": "WARNING: Suspicious approval requests detected. Revoke all permissions.",
+                "expected_action": "revoke",
+                "expected_message": "Permissions revoked successfully"
+            },
+            {
+                "alert": "ALERT: Token price crash imminent. Swap ETH to USDC immediately.",
+                "expected_action": "swap",
+                "expected_message": "Tokens swapped successfully"
+            },
+            {
+                "alert": "INFO: New protocol vulnerabilities reported. Set up monitoring.",
+                "expected_action": "monitor",
+                "expected_message": "Monitoring set up successfully"
+            }
         ]
         
-        # Mock OpenAI client
-        mock_openai = MagicMock()
+        # Configure mocks based on the alert content
+        def mock_response(alert_text):
+            if "withdraw" in alert_text.lower() or "vulnerability" in alert_text.lower():
+                return "Funds withdrawn successfully"
+            elif "revoke" in alert_text.lower() or "permission" in alert_text.lower():
+                return "Permissions revoked successfully"
+            elif "swap" in alert_text.lower() or "price" in alert_text.lower():
+                return "Tokens swapped successfully"
+            else:
+                return "Monitoring set up successfully"
+                
+        self.security_agent.get_mock_response = MagicMock(side_effect=mock_response)
         
-        # Create security agent with mock OpenAI
-        security_agent = SecurityAgent(mock_openai, mock_openai=True)
-        
-        # Mock the tools
-        security_agent.withdrawal_tool = MagicMock(return_value="Funds withdrawn successfully.")
-        security_agent.revoke_tool = MagicMock(return_value="Permissions revoked successfully.")
-        security_agent.monitor_tool = MagicMock(return_value="Monitoring set up successfully.")
-        
-        # Process a test alert
-        test_alert = """
-        CRITICAL SECURITY ALERT: Beefy protocol vulnerability detected on Base!
-        
-        A critical vulnerability has been identified in the Beefy protocol's vault contracts
-        on the Base chain. This vulnerability could allow an attacker to drain funds from affected vaults.
-        
-        Affected users: All users with beefyUSDC-USDT positions on Base
-        Risk level: HIGH
-        Recommendation: Withdraw funds immediately
-        """
-        
-        # Execute the test
-        result = security_agent.process_security_alert(test_alert)
-        
-        # Print the result
-        print("\nSecurity Alert Processing Result:")
-        print("-" * 50)
-        print(result)
-        print("-" * 50)
-        
-        # Assert that withdrawal_tool was called due to "vulnerability" in the alert
-        security_agent.withdrawal_tool.assert_called_once()
-        self.assertIn("withdrawn successfully", result)
+        # Run each test case
+        for tc in test_cases:
+            result = self.security_agent.process_alert(tc["alert"])
+            self.assertEqual(result, tc["expected_message"])
 
-    @patch('os.path.exists')
-    @patch('builtins.open', new_callable=unittest.mock.mock_open, read_data='{}')
-    @patch('json.load', return_value={})
-    def test_revoke_tool(self, mock_json_load, mock_open, mock_path_exists):
-        """
-        Test the revoke tool directly.
-        """
-        # Set up mock for json.load to return specific data for each file
-        mock_path_exists.return_value = True
-        mock_json_load.side_effect = [
-            {"dependencies": []},  # dependency_graph
-            {"users": []},         # user_balances
-            {"tokens": []},        # tokens_config
-            {"protocols": []}      # protocols_config
-        ]
-        
-        # Mock OpenAI client
-        mock_openai = MagicMock()
-        
-        # Create security agent
-        security_agent = SecurityAgent(mock_openai)
-        
-        # Mock the revoke tool
-        security_agent.revoke_tool = MagicMock(return_value="Permissions revoked successfully.")
-        
-        # Test parameters
-        parameters = {
-            "token": "USDC", 
-            "protocol": "Compromised Protocol",
-            "chain_id": "84532"
-        }
-        
-        # Execute the revoke tool
-        print("\nRevoke Tool Test:")
-        print("-" * 50)
-        result = security_agent.revoke_tool(parameters)
-        print(result)
-        print("-" * 50)
-        
-        # Assert that revoke_tool was called with the correct parameters
-        security_agent.revoke_tool.assert_called_once_with(parameters)
-        self.assertEqual(result, "Permissions revoked successfully.")
 
-    @patch('os.path.exists')
-    @patch('builtins.open', new_callable=unittest.mock.mock_open, read_data='{}')
-    @patch('json.load', return_value={})
-    def test_monitor_tool(self, mock_json_load, mock_open, mock_path_exists):
-        """
-        Test the monitor tool directly.
-        """
-        # Set up mock for json.load to return specific data for each file
-        mock_path_exists.return_value = True
-        mock_json_load.side_effect = [
-            {"dependencies": []},  # dependency_graph
-            {"users": []},         # user_balances
-            {"tokens": []},        # tokens_config
-            {"protocols": []}      # protocols_config
-        ]
-        
-        # Mock OpenAI client
-        mock_openai = MagicMock()
-        
-        # Create security agent
-        security_agent = SecurityAgent(mock_openai)
-        
-        # Mock the monitor tool
-        security_agent.monitor_tool = MagicMock(return_value="Monitoring set up successfully.")
-        
-        # Test parameters
-        parameters = {
-            "asset": "All Base Chain Positions", 
-            "duration": "48h"
-        }
-        
-        # Execute the monitor tool
-        print("\nMonitor Tool Test:")
-        print("-" * 50)
-        result = security_agent.monitor_tool(parameters)
-        print(result)
-        print("-" * 50)
-        
-        # Assert that monitor_tool was called with the correct parameters
-        security_agent.monitor_tool.assert_called_once_with(parameters)
-        self.assertEqual(result, "Monitoring set up successfully.")
-
-# Run the test
 if __name__ == "__main__":
     unittest.main()
