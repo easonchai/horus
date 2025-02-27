@@ -332,17 +332,114 @@ class SecurityAgent:
             response_json = json.loads(response_text)
             
             # If the response is a JSON object with an action_plan field
-            if "action_plan" in response_json and isinstance(response_json["action_plan"], list):
-                # Take the first action in the plan
-                if response_json["action_plan"]:
-                    action = response_json["action_plan"][0]
-                    return action.get("action", "unknown"), action.get("parameters", {})
+            if "action_plan" in response_json:
+                # Handle action_plan as a list (old format)
+                if isinstance(response_json["action_plan"], list):
+                    if response_json["action_plan"]:
+                        action = response_json["action_plan"][0]
+                        action_type = action.get("action", "unknown")
+                        parameters = action.get("parameters", {})
+                        return self._process_action_and_parameters(action_type, parameters)
+                
+                # Handle action_plan as an object (new format from OpenAI responses)
+                elif isinstance(response_json["action_plan"], dict):
+                    action_plan = response_json["action_plan"]
+                    # Get action_type from either "action" or "action_type" field
+                    action_type = action_plan.get("action") or action_plan.get("action_type", "unknown")
+                    parameters = action_plan.get("parameters", {})
+                    return self._process_action_and_parameters(action_type, parameters)
             
             # If we got here, JSON was valid but didn't have the expected structure
             return None
         except json.JSONDecodeError:
             # Not valid JSON
             return None
+            
+    def _process_action_and_parameters(self, action_type: str, parameters: Dict[str, Any]) -> Tuple[str, Dict[str, Any]]:
+        """
+        Process action type and parameters to ensure they are properly formatted.
+        
+        Args:
+            action_type: The type of action to take.
+            parameters: The parameters for the action.
+            
+        Returns:
+            A tuple of (action_type, parameters) with any necessary defaults or transformations applied.
+        """
+        # Normalize action type
+        if action_type.lower() in ["withdraw", "withdrawal"]:
+            action_type = "withdrawal"
+            
+            # Add default destination_address if missing
+            if "destination_address" not in parameters:
+                # Extract token and token_id if available
+                token = parameters.get("token", "unknown")
+                token_id = parameters.get("token_id")
+                
+                # Use different hardcoded addresses for different tokens (could be moved to config)
+                if token == "EIGEN" or "EIGEN" in str(token):
+                    parameters["destination_address"] = "0x742d35Cc6634C0532925a3b844Bc454e4438f44e"
+                else:
+                    # Default safe address
+                    parameters["destination_address"] = "0xf39Fd6e51aad88F6F4ce6aB8827279cffFb92266"
+                
+                logger.info(f"Added default destination_address for withdrawal: {parameters['destination_address']}")
+            
+            # Handle the case where token comes from a "tokens" array
+            if "tokens" in parameters and not parameters.get("token"):
+                tokens = parameters.get("tokens", [])
+                if tokens:
+                    # If tokens is a list of strings
+                    if isinstance(tokens[0], str):
+                        parameters["token"] = tokens[0]
+                    # If tokens is a list of dicts
+                    elif isinstance(tokens[0], dict) and "token" in tokens[0]:
+                        parameters["token"] = tokens[0]["token"]
+                    elif isinstance(tokens[0], dict) and "token_name" in tokens[0]:
+                        parameters["token"] = tokens[0]["token_name"]
+            
+            # Set default amount if missing
+            if "amount" not in parameters:
+                parameters["amount"] = "all"
+            
+            # Set default chain_id if missing
+            if "chain_id" not in parameters:
+                parameters["chain_id"] = "1"  # Default to Ethereum mainnet
+                
+        elif action_type.lower() in ["revoke", "revocation"]:
+            action_type = "revoke"
+            
+            # Set default spender_address if missing
+            if "spender_address" not in parameters and "approval_address" in parameters:
+                parameters["spender_address"] = parameters["approval_address"]
+                
+        elif action_type.lower() in ["swap", "exchange", "convert"]:
+            action_type = "swap"
+            
+            # Handle token mapping
+            if "tokens" in parameters:
+                tokens = parameters.get("tokens", [])
+                if tokens and isinstance(tokens, list) and len(tokens) >= 2:
+                    if not parameters.get("token_in"):
+                        parameters["token_in"] = tokens[0]
+                    if not parameters.get("token_out"):
+                        parameters["token_out"] = tokens[1]
+                        
+        elif action_type.lower() in ["monitor", "monitoring"]:
+            action_type = "monitor"
+            
+            # Convert "asset" or "asset_to_monitor" to standard format
+            if "asset_to_monitor" in parameters and "asset" not in parameters:
+                parameters["asset"] = parameters["asset_to_monitor"]
+                
+            # Set default duration and threshold if missing
+            if "duration" not in parameters:
+                parameters["duration"] = "24h"
+                
+            if "threshold" not in parameters:
+                parameters["threshold"] = "5%"
+                
+        return action_type, parameters
     
     def _parse_text_response(self, response_text: str) -> Tuple[str, Dict[str, Any]]:
         """
@@ -564,15 +661,45 @@ class SecurityAgent:
             system_prompt = """
             You are a cryptocurrency security agent tasked with protecting user funds. Analyze the security alert and 
             determine the appropriate protective action to take. Your response should include a JSON object with an 
-            "action_plan" field specifying the action to take.
+            "action_plan" field.
             
             Available actions:
             1. withdraw - Withdraw funds from a compromised protocol or token
+               Required parameters: 
+                - token: The token symbol to withdraw (e.g., "ETH", "USDC")
+                - amount: The amount to withdraw (e.g., "all", "1.5")
+                - destination_address: The wallet address to send funds to
+                - chain_id: The blockchain ID (e.g., "1" for Ethereum, "84532" for Base)
+                
             2. revoke - Revoke token approvals for a compromised or suspicious protocol
+               Required parameters:
+                - token: The token symbol (e.g., "USDC")
+                - token_address: The token contract address (alternative to token)
+                - spender_address: The address to revoke approval from
+                - chain_id: The blockchain ID
+                
             3. monitor - Set up enhanced monitoring for a specific asset
+               Required parameters:
+                - asset: The asset to monitor (e.g., "ETH", "All Positions")
+                - duration: Monitoring duration (e.g., "24h", "3d")
+                - threshold: Alert threshold (e.g., "5%")
+                
             4. swap - Swap a vulnerable token for a safer asset
+               Required parameters:
+                - token_in: The input token symbol (e.g., "ETH")
+                - token_out: The output token symbol (e.g., "USDC")
+                - amount_in: The amount to swap (e.g., "all", "1.5")
+                - chain_id: The blockchain ID
             
-            Each action requires specific parameters. Include these parameters in your response.
+            Return your response in this exact format:
+            {
+                "action_plan": {
+                    "action_type": "withdraw", // or "revoke", "monitor", "swap"
+                    "parameters": {
+                        // Include ALL required parameters for the selected action
+                    }
+                }
+            }
             """
             
             # Create a user prompt
@@ -583,7 +710,7 @@ class SecurityAgent:
             {context}
             
             Based on this alert, what protective action should be taken? Return a JSON object with 
-            an "action_plan" field that specifies the action type and required parameters.
+            an "action_plan" field that specifies the action type and ALL required parameters listed in my instructions.
             """
             
             try:
