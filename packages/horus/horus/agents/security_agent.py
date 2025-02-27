@@ -1,427 +1,65 @@
 """
 Security agent for the Horus security monitoring system.
+Functional programming implementation.
 """
-import json
 import logging
-import os
-import re
-from typing import Dict, Any, List, Optional, Tuple
+from typing import Any, Callable, Dict, List, Optional, Tuple
 
-from horus.tools import create_withdrawal_tool, create_revoke_tool, create_monitor_tool
+from horus.agents.security_agent_functional import (
+    create_security_agent as create_security_agent_func,
+    get_user_positions, get_exit_functions_for_token,
+    get_token_address, get_token_dependencies
+)
 
 # Configure logging
 logging.basicConfig(level=logging.INFO, format='[%(asctime)s] %(message)s')
 logger = logging.getLogger(__name__)
 
-
-class SecurityAgent:
-    """Agent for handling security-related tasks."""
-
-    def __init__(self, openai_client, mock_openai=False, mock_twitter=True):
-        """
-        Initialize the security agent.
-        
-        Args:
-            openai_client: The OpenAI client.
-            mock_openai: Whether to mock OpenAI responses.
-            mock_twitter: Whether to mock Twitter responses.
-        """
-        self.openai_client = openai_client
-        self.mock_openai = mock_openai
-        self.mock_twitter = mock_twitter
-        
-        # Load configuration files
-        self.dependency_graph = self._load_dependency_graph()
-        self.user_balances = self._load_user_balances()
-        self.tokens_config = self._load_tokens_config()
-        
-        # Initialize tools
-        self.withdrawal_tool = create_withdrawal_tool(self.dependency_graph, self.user_balances)
-        self.revoke_tool = create_revoke_tool(self.tokens_config)
-        self.monitor_tool = create_monitor_tool()
-        
-    def _load_dependency_graph(self) -> Dict[str, Any]:
-        """
-        Load the dependency graph from the configuration file.
-        
-        Returns:
-            Dictionary containing the dependency graph data.
-        """
-        try:
-            base_path = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
-            graph_path = os.path.join(base_path, '..', '..', 'config', 'dependency_graph.json')
-            
-            with open(graph_path, 'r') as file:
-                return json.load(file)
-        except Exception as e:
-            logger.error(f"Error loading dependency graph: {str(e)}")
-            return {"dependencies": []}
-            
-    def _load_user_balances(self) -> Dict[str, Any]:
-        """
-        Load user balances from the data file.
-        
-        Returns:
-            Dictionary containing user balance data.
-        """
-        try:
-            base_path = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
-            balances_path = os.path.join(base_path, '..', '..', 'user_data', 'user_balances.json')
-            
-            with open(balances_path, 'r') as file:
-                return json.load(file)
-        except Exception as e:
-            logger.error(f"Error loading user balances: {str(e)}")
-            return {"users": []}
-            
-    def _load_tokens_config(self) -> Dict[str, Any]:
-        """
-        Load token configuration from the config file.
-        
-        Returns:
-            Dictionary containing token configuration data.
-        """
-        try:
-            base_path = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
-            tokens_path = os.path.join(base_path, '..', '..', 'config', 'tokens.json')
-            
-            with open(tokens_path, 'r') as file:
-                return json.load(file)
-        except Exception as e:
-            logger.error(f"Error loading tokens config: {str(e)}")
-            return {"tokens": []}
+# Create a factory function that maintains compatibility with the class-based API
+def SecurityAgent(openai_client, mock_openai=False, mock_twitter=True):
+    """
+    Factory function that creates a security agent with the same API as the original class.
     
-    # Helper methods that can be used by the tools
-    def get_user_positions(self, user_address: str, chain_id: str) -> List[Dict[str, Any]]:
-        """
-        Get positions for a user on a specific chain.
+    Args:
+        openai_client: The OpenAI client.
+        mock_openai: Whether to mock OpenAI responses.
+        mock_twitter: Whether to mock Twitter responses.
         
-        Args:
-            user_address: The user's address.
-            chain_id: The chain ID.
-            
-        Returns:
-            A list of user positions.
-        """
-        chain_id = str(chain_id)  # Ensure chain_id is a string
-        
-        if not self.user_balances:
-            logger.warning("User balances not loaded")
-            return []
-        
-        user_data = self.user_balances.get(user_address, {})
-        chain_data = user_data.get(chain_id, {})
-        return chain_data.get("positions", [])
-        
-    def get_exit_functions_for_token(self, token: str, chain_id: str) -> List[Dict[str, Any]]:
-        """
-        Get exit functions for a token on a specific chain.
-        
-        Args:
-            token: The token symbol.
-            chain_id: The chain ID.
-            
-        Returns:
-            A list of exit functions.
-        """
-        chain_id = str(chain_id)  # Ensure chain_id is a string
-        
-        if not self.dependency_graph:
-            logger.warning("Dependency graph not loaded")
-            return []
-        
-        # Find the token in the dependency graph
-        for node in self.dependency_graph.get("nodes", []):
-            if node.get("symbol") == token and str(node.get("chainId")) == chain_id:
-                return node.get("exitFunctions", [])
-        
-        return []
+    Returns:
+        A security agent function with attached methods to maintain compatibility.
+    """
+    # Create the base security agent function
+    agent = create_security_agent_func(openai_client, mock_openai, mock_twitter)
     
-    def get_token_address(self, token_symbol: str, chain_id: str) -> Optional[str]:
-        """
-        Get the contract address for a token on a specific chain.
-        
-        Args:
-            token_symbol: The symbol of the token.
-            chain_id: The chain ID.
-            
-        Returns:
-            Token contract address or None if not found.
-        """
-        chain_id = str(chain_id)  # Ensure chain_id is a string
-        
-        for token in self.tokens_config.get("tokens", []):
-            if token.get("symbol") == token_symbol:
-                networks = token.get("networks", {})
-                return networks.get(chain_id)
-        return None
-        
-    def get_token_dependencies(self, token_symbol: str) -> List[Dict[str, Any]]:
-        """
-        Get dependencies for a specific token.
-        
-        Args:
-            token_symbol: The symbol of the token.
-            
-        Returns:
-            List of underlying tokens and their information.
-        """
-        for dependency in self.dependency_graph.get("dependencies", []):
-            if dependency.get("derivativeSymbol") == token_symbol:
-                return dependency.get("underlyings", [])
-        return []
+    # The agent already has the following attributes attached:
+    # - dependency_graph
+    # - user_balances
+    # - tokens_config
+    # - withdrawal_tool
+    # - revoke_tool
+    # - monitor_tool
+    # - get_user_positions (as a lambda)
+    # - get_exit_functions_for_token (as a lambda)
+    # - get_token_address (as a lambda)
+    # - get_token_dependencies (as a lambda)
     
-    def _prepare_context_for_ai(self) -> str:
-        """
-        Prepare context information from dependency graph and user balances for the AI.
-        
-        Returns:
-            A string containing formatted context information.
-        """
-        context = []
-        
-        # Add information about dependencies
-        context.append("DEPENDENCY INFORMATION:")
-        for dependency in self.dependency_graph.get("dependencies", [])[:5]:  # Limit to prevent token overflow
-            derivative = dependency.get("derivativeSymbol", "unknown")
-            protocol = dependency.get("protocol", "unknown")
-            chain = dependency.get("chainId", "unknown")
-            underlyings = dependency.get("underlyings", [])
-            
-            underlying_info = []
-            for u in underlyings:
-                if isinstance(u, dict):
-                    underlying_info.append(f"{u.get('symbol', 'unknown')} (ratio: {u.get('ratio', 'unknown')})")
-                else:
-                    underlying_info.append(str(u))
-            
-            context.append(f"- {derivative} on {protocol} (Chain: {chain}) is based on: {', '.join(underlying_info)}")
-        
-        # Add user balance information
-        context.append("\nUSER BALANCE INFORMATION:")
-        for user in self.user_balances.get("users", []):
-            address = user.get("address", "unknown")
-            context.append(f"- User: {address}")
-            
-            for chain_id, balances in user.get("chainBalances", {}).items():
-                context.append(f"  Chain {chain_id}:")
-                
-                # Add token balances
-                for token, amount in balances.items():
-                    if token != "positions":
-                        context.append(f"  - {token}: {amount}")
-                
-                # Add positions
-                if "positions" in balances:
-                    context.append(f"  Positions:")
-                    for position in balances["positions"]:
-                        protocol = position.get("protocol", "")
-                        symbol = position.get("symbol", "unknown")
-                        token_id = position.get("tokenId", "unknown")
-                        shares = position.get("shares", "")
-                        liquidity = position.get("liquidity", "")
-                        
-                        position_info = f"  - {symbol} (ID: {token_id})"
-                        if protocol:
-                            position_info += f" on {protocol}"
-                        if shares:
-                            position_info += f", Shares: {shares}"
-                        if liquidity:
-                            position_info += f", Liquidity: {liquidity}"
-                            
-                        context.append(position_info)
-        
-        return "\n".join(context)
-        
-    def process_security_alert(self, alert_text: str) -> str:
-        """
-        Process a security alert and take appropriate action.
-        
-        Args:
-            alert_text: The text of the security alert.
-            
-        Returns:
-            A string describing the action taken.
-        """
-        # Prepare the context for the AI
-        context = self._prepare_context_for_ai()
-        
-        # If we're mocking OpenAI, return a mock response
-        if self.mock_openai:
-            logger.info("Using mock OpenAI response")
-            return self._get_mock_response(alert_text)
-        
-        # Otherwise, use the OpenAI API to process the alert
-        try:
-            response = self.openai_client.chat.completions.create(
-                model="gpt-4o",
-                messages=[
-                    {"role": "system", "content": context},
-                    {"role": "user", "content": f"SECURITY ALERT: {alert_text}"}
-                ],
-                temperature=0.2,
-            )
-            
-            # Extract the response text
-            response_text = response.choices[0].message.content
-            logger.info(f"OpenAI response: {response_text}")
-            
-            # Parse the response to determine the action to take
-            action_type, parameters = self._parse_ai_response(response_text)
-            
-            # Take the appropriate action
-            if action_type == "withdrawal":
-                return self.withdrawal_tool(parameters)
-            elif action_type == "revoke":
-                return self.revoke_tool(parameters)
-            elif action_type == "monitor":
-                return self.monitor_tool(parameters)
-            else:
-                return f"No action taken. AI response: {response_text}"
-            
-        except Exception as e:
-            logger.error(f"Error processing security alert: {e}")
-            return f"Error processing security alert: {e}"
-
-    def _get_mock_response(self, alert_text: str) -> str:
-        """
-        Generate a mock response for testing purposes.
-        
-        Args:
-            alert_text: The text of the security alert.
-            
-        Returns:
-            A string describing the action taken.
-        """
-        logger.info("Generating mock response")
-        
-        # Extract keywords from the alert text to determine the appropriate action
-        alert_lower = alert_text.lower()
-        
-        if "withdraw" in alert_lower or "vulnerability" in alert_lower:
-            parameters = {
-                "token": "USDC",
-                "amount": "ALL",
-                "destination": "safe_wallet",
-                "chain_id": "84532",  # Base chain
-                "user_address": "0xf39Fd6e51aad88F6F4ce6aB8827279cffFb92266"
-            }
-            return self.withdrawal_tool(parameters)
-            
-        elif "revoke" in alert_lower or "permissions" in alert_lower:
-            parameters = {
-                "token": "USDC",
-                "protocol": "Compromised Protocol",
-                "chain_id": "84532"  # Base chain
-            }
-            return self.revoke_tool(parameters)
-            
-        else:
-            parameters = {
-                "asset": "All Base Chain Positions",
-                "duration": "48h",
-                "threshold": "3%"
-            }
-            return self.monitor_tool(parameters)
-
-    def _parse_ai_response(self, response_text: str) -> Tuple[str, Dict[str, Any]]:
-        """
-        Parse the AI response to determine the action to take.
-        
-        Args:
-            response_text: The response from the AI.
-            
-        Returns:
-            A tuple containing the action type and parameters.
-        """
-        logger.info("Parsing AI response")
-        
-        try:
-            # Try to parse as JSON first
-            try:
-                response_json = json.loads(response_text)
-                
-                # If the response is a JSON object with an action_plan field
-                if "action_plan" in response_json and isinstance(response_json["action_plan"], list):
-                    # Take the first action in the plan
-                    if response_json["action_plan"]:
-                        action = response_json["action_plan"][0]
-                        return action.get("action", "unknown"), action.get("parameters", {})
-            except json.JSONDecodeError:
-                # Not valid JSON, continue with text parsing
-                pass
-                
-            # If not valid JSON or doesn't have the expected structure, parse as text
-            response_lower = response_text.lower()
-            
-            if "withdraw" in response_lower:
-                # Extract parameters from the text
-                parameters = {
-                    "token": self._extract_parameter(response_text, "token", "USDC"),
-                    "amount": self._extract_parameter(response_text, "amount", "ALL"),
-                    "destination": self._extract_parameter(response_text, "destination", "safe_wallet"),
-                    "chain_id": self._extract_parameter(response_text, "chain", "84532"),
-                    "user_address": "0xf39Fd6e51aad88F6F4ce6aB8827279cffFb92266"
-                }
-                return "withdrawal", parameters
-                
-            elif "revoke" in response_lower:
-                # Extract parameters from the text
-                parameters = {
-                    "token": self._extract_parameter(response_text, "token", "USDC"),
-                    "protocol": self._extract_parameter(response_text, "protocol", "Compromised Protocol"),
-                    "chain_id": self._extract_parameter(response_text, "chain", "84532")
-                }
-                return "revoke", parameters
-                
-            elif "monitor" in response_lower:
-                # Extract parameters from the text
-                parameters = {
-                    "asset": self._extract_parameter(response_text, "asset", "All Positions"),
-                    "duration": self._extract_parameter(response_text, "duration", "48h"),
-                    "threshold": self._extract_parameter(response_text, "threshold", "3%")
-                }
-                return "monitor", parameters
-                
-            else:
-                # Default to monitoring if no specific action is mentioned
-                parameters = {
-                    "asset": "All Positions",
-                    "duration": "24h",
-                    "threshold": "5%"
-                }
-                return "monitor", parameters
-                
-        except Exception as e:
-            logger.error(f"Error parsing AI response: {e}")
-            # Default to monitoring in case of error
-            parameters = {
-                "asset": "All Positions",
-                "duration": "24h",
-                "threshold": "5%"
-            }
-            return "monitor", parameters
-            
-    def _extract_parameter(self, text: str, param_name: str, default_value: str) -> str:
-        """
-        Extract a parameter value from text.
-        
-        Args:
-            text: The text to extract from.
-            param_name: The name of the parameter.
-            default_value: The default value if the parameter is not found.
-            
-        Returns:
-            The extracted parameter value or the default value.
-        """
-        import re
-        
-        # Try to find the parameter in the text
-        pattern = rf'{param_name}["\s:]+([^",\s]+|"[^"]+"|\'[^\']+\')'
-        match = re.search(pattern, text, re.IGNORECASE)
-        
-        if match:
-            value = match.group(1).strip('"\'')
-            return value
-            
-        return default_value
+    # Add _prepare_context_for_ai method for compatibility
+    agent._prepare_context_for_ai = lambda: agent.prepare_context_for_ai(
+        agent.dependency_graph, agent.user_balances
+    )
+    
+    # Add _parse_ai_response method for compatibility
+    agent._parse_ai_response = lambda response_text: agent.parse_ai_response(response_text)
+    
+    # Add _get_mock_response method for compatibility
+    agent._get_mock_response = lambda alert_text: agent.get_mock_response(
+        alert_text, agent.withdrawal_tool, agent.revoke_tool, agent.monitor_tool
+    )
+    
+    # Add _try_parse_json_response method for compatibility
+    agent._try_parse_json_response = lambda response_text: agent.try_parse_json_response(response_text)
+    
+    # Add process_security_alert method for compatibility
+    agent.process_security_alert = lambda alert_text: agent.process_alert(alert_text)
+    
+    return agent
