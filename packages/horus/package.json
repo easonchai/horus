@@ -7,6 +7,6 @@
     "dev:original": "poetry run dev",
     "build": "poetry build",
     "lint": "poetry run pylint horus",
-    "test": "poetry run pytest"
+    "test": "poetry run python -m unittest tests/test_swap_tool.py tests/test_revoke_tool.py tests/test_security.py tests/test_withdrawal_tool.py tests/test_twitter_monitor.py"
   }
 }
