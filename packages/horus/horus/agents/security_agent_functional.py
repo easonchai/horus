@@ -8,7 +8,8 @@ import os
 import re
 from typing import Any, Callable, Dict, List, Optional, Tuple
 
-from horus.tools import create_withdrawal_tool, create_revoke_tool, create_monitor_tool
+from horus.tools import create_withdrawal_tool, create_monitor_tool
+from horus.tools.revoke import RevokeTool
 
 # Configure logging
 logging.basicConfig(level=logging.INFO, format='[%(asctime)s] %(message)s')
@@ -68,6 +69,24 @@ def load_tokens_config() -> Dict[str, Any]:
     except Exception as e:
         logger.error(f"Error loading tokens config: {str(e)}")
         return {"tokens": []}
+
+
+def load_protocols_config() -> Dict[str, Any]:
+    """
+    Load protocols configuration from the config file.
+    
+    Returns:
+        Dictionary containing protocols configuration data.
+    """
+    try:
+        base_path = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+        protocols_path = os.path.join(base_path, '..', '..', 'config', 'protocols.json')
+        
+        with open(protocols_path, 'r') as file:
+            return json.load(file)
+    except Exception as e:
+        logger.error(f"Error loading protocols config: {str(e)}")
+        return {"protocols": []}
 
 
 # Helper functions for data access
@@ -303,37 +322,36 @@ def parse_text_response(response_text: str) -> Tuple[str, Dict[str, Any]]:
     """
     response_lower = response_text.lower()
     
-    if "withdraw" in response_lower:
-        # Extract parameters from the text
-        parameters = {
-            "token": extract_parameter(response_text, "token", "USDC"),
-            "amount": extract_parameter(response_text, "amount", "ALL"),
-            "destination": extract_parameter(response_text, "destination", "safe_wallet"),
-            "chain_id": extract_parameter(response_text, "chain", "84532"),
-            "user_address": "0xf39Fd6e51aad88F6F4ce6aB8827279cffFb92266"
-        }
-        return "withdrawal", parameters
+    # Check for withdrawal action
+    if "withdraw" in response_lower or "exit" in response_lower:
+        token = extract_parameter(response_text, "token", "unknown")
+        amount = extract_parameter(response_text, "amount", "all")
+        chain_id = extract_parameter(response_text, "chain_id", "1")
         
-    elif "revoke" in response_lower:
-        # Extract parameters from the text
-        parameters = {
-            "token": extract_parameter(response_text, "token", "USDC"),
-            "protocol": extract_parameter(response_text, "protocol", "Compromised Protocol"),
-            "chain_id": extract_parameter(response_text, "chain", "84532")
+        return "withdrawal", {
+            "token": token,
+            "amount": amount,
+            "chain_id": chain_id
         }
-        return "revoke", parameters
+    
+    # Check for revoke action
+    elif "revoke" in response_lower or "permissions" in response_lower or "approval" in response_lower:
+        token = extract_parameter(response_text, "token", "unknown")
+        token_address = extract_parameter(response_text, "token_address", "unknown")
+        protocol = extract_parameter(response_text, "protocol", "unknown")
+        chain_id = extract_parameter(response_text, "chain_id", "1")
+        spender_address = extract_parameter(response_text, "spender_address", "")
         
-    elif "monitor" in response_lower:
-        # Extract parameters from the text
-        parameters = {
-            "asset": extract_parameter(response_text, "asset", "All Positions"),
-            "duration": extract_parameter(response_text, "duration", "48h"),
-            "threshold": extract_parameter(response_text, "threshold", "3%")
+        return "revoke", {
+            "token": token,
+            "token_address": token_address,
+            "protocol": protocol,
+            "chain_id": chain_id,
+            "spender_address": spender_address
         }
-        return "monitor", parameters
-        
+    
+    # Default to monitor action
     else:
-        # Default to monitoring if no specific action is mentioned
         return get_default_monitor_action()
 
 
@@ -430,10 +448,11 @@ def create_security_agent(openai_client, mock_openai=False, mock_twitter=True):
     dependency_graph = load_dependency_graph()
     user_balances = load_user_balances()
     tokens_config = load_tokens_config()
+    protocols_config = load_protocols_config()
     
     # Initialize tools
     withdrawal_tool = create_withdrawal_tool(dependency_graph, user_balances)
-    revoke_tool = create_revoke_tool(tokens_config)
+    revoke_tool = RevokeTool(tokens_config, protocols_config)
     monitor_tool = create_monitor_tool()
     
     def process_alert(alert_text: str) -> str:
@@ -503,6 +522,7 @@ def create_security_agent(openai_client, mock_openai=False, mock_twitter=True):
     security_agent.dependency_graph = dependency_graph
     security_agent.user_balances = user_balances
     security_agent.tokens_config = tokens_config
+    security_agent.protocols_config = protocols_config
     security_agent.withdrawal_tool = withdrawal_tool
     security_agent.revoke_tool = revoke_tool
     security_agent.monitor_tool = monitor_tool

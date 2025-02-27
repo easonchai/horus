@@ -100,3 +100,97 @@ python -m tests.test_security
 ```
 
 This will run tests for all the tools and the security agent.
+
+## Revoke Tool Details
+
+The revoke tool is implemented in `revoke.py` and uses Coinbase's AgentKit to interact with the blockchain. It provides a way to revoke token approvals for potentially compromised protocols.
+
+### Prerequisites
+
+To use the revoke tool, you need to have the following:
+
+1. A Coinbase Developer Platform (CDP) API key
+2. The `coinbase-agentkit` and `coinbase-agentkit-langchain` packages installed
+3. Environment variables set up for the CDP API key
+
+### Environment Variables
+
+The revoke tool requires the following environment variables:
+
+```
+CDP_API_KEY_NAME=your_cdp_api_key_name
+CDP_API_KEY_PRIVATE_KEY=your_cdp_api_key_private_key
+```
+
+### Usage
+
+The revoke tool is created using the `create_revoke_tool` factory function:
+
+```python
+from horus.tools import create_revoke_tool
+
+# Create the revoke tool with token configuration
+revoke_tool = create_revoke_tool(tokens_config)
+
+# Use the revoke tool
+result = revoke_tool({
+    "token_address": "0x...",  # The token contract address
+    "spender_address": "0x...",  # The address that has permission to spend the token
+    "protocol": "Uniswap V3",  # Optional: The protocol name for logging
+    "chain_id": "84532"  # Optional: The chain ID (default: 84532 for Base Sepolia)
+})
+
+print(result)
+```
+
+Alternatively, you can provide a token symbol instead of a token address:
+
+```python
+result = revoke_tool({
+    "token": "USDC",  # The token symbol
+    "spender_address": "0x...",  # The address that has permission to spend the token
+    "protocol": "Uniswap V3",  # Optional: The protocol name for logging
+    "chain_id": "84532"  # Optional: The chain ID (default: 84532 for Base Sepolia)
+})
+```
+
+### Supported Networks
+
+The revoke tool supports all EVM networks, with block explorer links for the following networks:
+
+- Ethereum Mainnet (chain_id: 1)
+- Base Sepolia Testnet (chain_id: 84532)
+- Base Mainnet (chain_id: 8453)
+- Arbitrum One (chain_id: 42161)
+- Optimism (chain_id: 10)
+- Polygon (chain_id: 137)
+
+### Error Handling
+
+The revoke tool includes robust error handling for common issues:
+
+- Missing token address or spender address
+- Failed wallet initialization
+- Failed transaction execution
+- Network errors
+
+### Integration with Security Agent
+
+The revoke tool is integrated with the Horus security agent, which can automatically call the tool when a security threat is detected. The agent uses OpenAI to analyze security alerts and determine whether to call the revoke tool.
+
+Example security alert that would trigger the revoke tool:
+
+```
+SECURITY ALERT: Suspicious approval detected for USDC token to spender 0x1234567890123456789012345678901234567890 on Base Sepolia (chain_id: 84532). This approval was made to a protocol that has been flagged for potential security issues. Consider revoking this approval immediately.
+```
+
+## Implementation Details
+
+All tools follow a functional programming approach, using factory functions to create tool functions with closures to maintain state. This approach provides several benefits:
+
+1. **Explicit Dependencies**: Dependencies are explicitly passed to the factory function
+2. **Immutable State**: The tool functions are pure functions with no side effects
+3. **Testability**: The tool functions are easy to test in isolation
+4. **Composability**: The tool functions can be easily composed with other functions
+
+The base implementation for all tools is in `base.py`, which provides the `create_tool` function that creates a tool function with metadata.

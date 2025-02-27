@@ -12,6 +12,7 @@ Horus is a security monitoring agent for cryptocurrency wallets that protects us
 - **Dynamic Tool Calling**: Automatically selects appropriate tools for different security scenarios.
 - **Flexible Operational Modes**: Supports multiple operational modes, including mock modes for testing and development.
 - **Modular Tool Architecture**: Uses a modular tool architecture for easy extension with new security actions.
+- **AgentKit Integration**: Leverages Coinbase's AgentKit for secure blockchain interactions, including token approval revocation.
 
 ## Overview
 
@@ -39,14 +40,9 @@ Horus uses a sophisticated approach to handle security threats:
 
 4. **User Position Consideration**: Horus examines the user's current token positions to prioritize protecting the most at-risk assets.
 
-5. **Sequential Execution**: The agent executes each action in the plan in order, with proper error handling between steps.
+5. **Sequential Execution**: The agent executes the action plan steps in sequence, with each step potentially modifying the plan based on results.
 
-6. **Tool Composition**: The system can compose different tools together in various sequences depending on the specific security scenario. For example:
-   - For a compromised token: Revoke permissions → Swap to a safer asset
-   - For a vulnerable protocol: Withdraw funds → Swap to a safer asset → Revoke permissions
-   - For a wallet compromise: Withdraw all funds → Revoke all permissions
-
-This approach allows Horus to handle complex security scenarios that require multiple coordinated actions to fully secure the user's assets.
+6. **AgentKit-Powered Operations**: For blockchain operations like token approval revocation, Horus uses Coinbase's AgentKit to securely interact with the blockchain.
 
 ## Configuration Files
 
@@ -73,7 +69,7 @@ Horus implements a modular tool architecture that allows it to respond to securi
 ### Available Tools
 
 - **WithdrawalTool**: Withdraws funds from compromised protocols to secure addresses
-- **RevokeTool**: Revokes permissions for compromised tokens or protocols
+- **RevokeTool**: Revokes permissions for compromised tokens or protocols using AgentKit
 - **MonitorTool**: Monitors assets for suspicious activity
 
 The tools are implemented as Python classes that inherit from the base `BaseTool` class. Each tool implements an `execute` method that takes a dictionary of parameters and returns a string describing the action taken.
@@ -202,18 +198,21 @@ The project is organized into the following directories:
 
 ## Environment Configuration
 
-Create a `.env` file based on `.env.example` with the following variables:
+Create a `.env` file with the following variables:
 
 ```
-# Twitter API (Optional if USE_MOCK_DATA=true)
-TWITTER_BEARER_TOKEN=your_bearer_token
+# OpenAI API Key
+OPENAI_API_KEY=your_openai_api_key
+
+# Twitter API Keys (optional, only needed if not using mock mode)
 TWITTER_API_KEY=your_api_key
 TWITTER_API_SECRET=your_api_secret
 TWITTER_ACCESS_TOKEN=your_access_token
 TWITTER_ACCESS_TOKEN_SECRET=your_access_token_secret
 
-# OpenAI API (Required for real OpenAI analysis)
-OPENAI_API_KEY=your_openai_api_key
+# Coinbase Developer Platform API Keys (for AgentKit integration)
+CDP_API_KEY_NAME=your_cdp_api_key_name
+CDP_API_KEY_PRIVATE_KEY=your_cdp_api_key_private_key
 
 # Horus Configuration
 USE_MOCK_DATA=true  # Controls Twitter data mocking
@@ -295,7 +294,7 @@ SWAP TOOL CALLED: Swapping all USDC to ETH
 
 Executing step 3: revoke
 Explanation: Lastly, we should revoke the permissions for the compromised protocol to prevent any future unauthorized transactions.
-REVOKE TOOL CALLED: Revoking permissions for token: None, protocol: Uniswap V3
+AGENTKIT REVOKE TOOL CALLED: Revoking permissions for token: None, protocol: Uniswap V3
 
 Horus Response: Emergency withdrawal initiated: all USDC to 0x1234567890abcdef1234567890abcdef12345678.
 Emergency swap initiated: all USDC to ETH.
