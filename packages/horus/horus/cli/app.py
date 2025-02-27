@@ -43,38 +43,59 @@ class HorusApp:
         """Start the Horus app."""
         args = self.parse_args()
         
-        logger.info("Starting Horus Security Monitoring Agent...")
+        # Display a welcome banner
+        self._display_welcome_banner()
         
-        # Start Twitter monitoring
-        self.twitter_agent = TwitterAgent(self.security_agent, interval=args.interval)
+        # Show configuration
+        print("\033[1;33m[CONFIG]\033[0m OpenAI API Key:", "\033[1;32mConfigured ✓\033[0m" if os.getenv("OPENAI_API_KEY") else "\033[1;31mMissing ✗\033[0m")
+        print("\033[1;33m[CONFIG]\033[0m Twitter Credentials:", "\033[1;35mUsing Mocks\033[0m")
+        print("\033[1;33m[CONFIG]\033[0m CDP API:", "\033[1;35mUsing Mocks\033[0m")
+        print("\033[1;33m[CONFIG]\033[0m Monitoring Interval:", f"\033[1;36m{args.interval} seconds\033[0m")
+        print("\033[1;33m[CONFIG]\033[0m Demo Mode:", "\033[1;32mEnabled ✓\033[0m" if args.test else "\033[1;33mDisabled ✗\033[0m")
+        print("-" * 80)
+        
+        # Start Twitter monitoring with shorter interval in demo mode
+        if args.test:
+            print("\033[1;36m[DEMO]\033[0m Starting demo mode with shorter monitoring interval (30 seconds)")
+            self.twitter_agent = TwitterAgent(self.security_agent, interval=30)
+        else:
+            print(f"\033[1;34m[INFO]\033[0m Starting Twitter monitoring with interval of {args.interval} seconds")
+            self.twitter_agent = TwitterAgent(self.security_agent, interval=args.interval)
+            
         self.twitter_agent.start()
         
-        # Run test scenario if requested
+        # Run the test scenario in test mode
         if args.test:
+            print("\033[1;36m[DEMO]\033[0m Running test scenario with simulated security alerts")
             self.run_test_scenario()
-            return
-        
-        # Start interactive mode
-        try:
-            logger.info("\nEnter a security alert message (or type 'exit' to quit):")
-            while True:
-                try:
-                    user_input = input("> ")
-                    if user_input.lower() == "exit":
-                        break
-                    
-                    if user_input.strip():
-                        response = self.security_agent.process_security_alert(user_input)
-                        logger.info(response)
-                except KeyboardInterrupt:
-                    break
-                except Exception as e:
-                    logger.error(f"Error: {str(e)}")
-        
-        finally:
-            # Stop Twitter monitoring
-            if self.twitter_agent:
-                self.twitter_agent.stop()
+        else:
+            print("\033[1;34m[INFO]\033[0m Monitoring active. Press Ctrl+C to stop.")
+            try:
+                # Keep the main thread running
+                while True:
+                    import time
+                    time.sleep(1)
+            except KeyboardInterrupt:
+                print("\033[1;33m[SHUTDOWN]\033[0m Keyboard interrupt received, shutting down...")
+                self.stop()
+    
+    def _display_welcome_banner(self):
+        """Display a welcome banner for the Horus Security Agent."""
+        banner = """
+\033[1;36m██╗  ██╗ ██████╗ ██████╗ ██╗   ██╗███████╗\033[0m
+\033[1;36m██║  ██║██╔═══██╗██╔══██╗██║   ██║██╔════╝\033[0m
+\033[1;36m███████║██║   ██║██████╔╝██║   ██║███████╗\033[0m
+\033[1;36m██╔══██║██║   ██║██╔══██╗██║   ██║╚════██║\033[0m
+\033[1;36m██║  ██║╚██████╔╝██║  ██║╚██████╔╝███████║\033[0m
+\033[1;36m╚═╝  ╚═╝ ╚═════╝ ╚═╝  ╚═╝ ╚═════╝ ╚══════╝\033[0m
+                                     
+\033[1;33m      Crypto Security Monitoring Agent\033[0m
+\033[0;37m         ETHDenver 2025 Hackathon\033[0m
+        """
+        print(banner)
+        print("=" * 80)
+        print("\033[1;32m🔒 SYSTEM STARTUP\033[0m")
+        print("=" * 80)
     
     def run_test_scenario(self):
         """Run a test scenario with predefined security alerts."""
@@ -94,6 +115,11 @@ class HorusApp:
             logger.info("--------------------------------------------------")
         
         logger.info("Test scenario completed.")
+    
+    def stop(self):
+        """Stop the Horus app."""
+        if self.twitter_agent:
+            self.twitter_agent.stop()
 
 
 def main():

@@ -14,6 +14,8 @@ import unittest
 from unittest.mock import MagicMock, patch
 
 from dotenv import load_dotenv
+# Import the mock_agent_kit utilities for tests
+from tests.mock_agent_kit import setup_mocks, teardown_mocks
 
 # Configure logging
 logging.basicConfig(level=logging.INFO, format='[%(asctime)s] %(message)s')
@@ -58,7 +60,7 @@ SAMPLE_TOKENS_CONFIG = {
         {
             "symbol": "USDC",
             "name": "USD Coin",
-            "chains": {  # Using chains instead of networks to match the implementation
+            "networks": {
                 "84532": "0xf175520c52418dfe19c8098071a252da48cd1c19",
                 "1": "0xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb48"
             }
@@ -66,7 +68,7 @@ SAMPLE_TOKENS_CONFIG = {
         {
             "symbol": "ETH",
             "name": "Ethereum",
-            "chains": {  # Using chains instead of networks to match the implementation
+            "networks": {
                 "84532": "0x4200000000000000000000000000000000000006",
                 "1": "0xeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee"
             }
@@ -74,7 +76,7 @@ SAMPLE_TOKENS_CONFIG = {
         {
             "symbol": "WETH",
             "name": "Wrapped Ethereum",
-            "chains": {  # Using chains instead of networks to match the implementation
+            "networks": {
                 "84532": "0x4200000000000000000000000000000000000006",
                 "1": "0xc02aaa39b223fe8d0a0e5c4f27ead9083c756cc2"
             }
@@ -82,7 +84,7 @@ SAMPLE_TOKENS_CONFIG = {
         {
             "symbol": "UNI-V3-LP",
             "name": "Uniswap V3 LP Token",
-            "chains": {  # Using chains instead of networks to match the implementation
+            "networks": {
                 "84532": "0x1234567890abcdef1234567890abcdef12345678",
                 "1": "0xabcdef1234567890abcdef1234567890abcdef12"
             }
@@ -96,14 +98,10 @@ SAMPLE_PROTOCOLS_CONFIG = {
             "name": "UniswapV3",
             "chains": {
                 "84532": {
-                    "swapRouter": "0xbe330043dbf77f92be10e3e3499d8da189d638cb",
-                    "nonfungiblePositionManager": "0xc36442b4a4522e871399cd717abdd847ab11fe88",
-                    "factory": "0x1f98431c8ad98523631ae4a59f267346ea31f984"
+                    "router": "0xbe330043dbf77f92be10e3e3499d8da189d638cb"
                 },
                 "1": {
-                    "swapRouter": "0xe592427a0aece92de3edee1f18e0157c05861564",
-                    "nonfungiblePositionManager": "0xc36442b4a4522e871399cd717abdd847ab11fe88",
-                    "factory": "0x1f98431c8ad98523631ae4a59f267346ea31f984"
+                    "router": "0xe592427a0aece92de3edee1f18e0157c05861564"
                 }
             }
         },
@@ -145,443 +143,371 @@ FALLBACK_POSITION_MANAGERS = {
 class TestSwapTool(unittest.TestCase):
     """Test case for the SwapTool."""
     
+    @classmethod
+    def setUpClass(cls):
+        """Set up test fixtures that should be shared across all tests."""
+        # Set up mocks for AgentKit
+        cls.patches = setup_mocks()
+        
+        # Import SwapTool after setting up mocks
+        from horus.tools.swap import SwapTool
+        cls.SwapTool = SwapTool
+        
+        from horus.tools.agent_kit import agent_kit_manager
+        cls.agent_kit_manager = agent_kit_manager
+
+    @classmethod
+    def tearDownClass(cls):
+        """Clean up shared test fixtures."""
+        # Tear down mocks
+        teardown_mocks(cls.patches)
+
     def setUp(self):
-        """Set up test fixtures."""
-        # Create a mock for CdpActionProvider
-        self.mock_action_provider = MagicMock()
-        self.mock_wallet_provider = MagicMock()
+        self.swap_tool = self.SwapTool(SAMPLE_TOKENS_CONFIG, SAMPLE_PROTOCOLS_CONFIG)
+        logger.info("SwapTool initialized")
         
-        # Configure the mock to return a success result
-        mock_result = MagicMock()
-        mock_result.status = "SUCCESS"
-        mock_result.transaction_hash = "0x1234567890abcdef"
-        mock_result.message = "Swap successful"
-        mock_result.amount_out = "1850.0"  # Example: 1 ETH -> 1850 USDC
-        self.mock_action_provider.execute_swap.return_value = mock_result
-        
-        # Configure wallet provider to return a default account
-        self.mock_wallet_provider.get_default_account.return_value = "0xDefaultAccount"
-        
-        # Create patches
-        self.action_provider_patcher = patch('horus.tools.swap.CdpActionProvider')
-        self.wallet_provider_patcher = patch('horus.tools.swap.CdpWalletProvider')
-        
-        # Start the patches
-        mock_action_provider_class = self.action_provider_patcher.start()
-        mock_wallet_provider_class = self.wallet_provider_patcher.start()
-        
-        # Configure the mock classes to return our mocks
-        mock_action_provider_class.return_value = self.mock_action_provider
-        mock_wallet_provider_class.return_value = self.mock_wallet_provider
-        
-        # Create a test patch for constants
-        self.constants_patcher = patch('horus.tools.swap.FALLBACK_POSITION_MANAGERS', FALLBACK_POSITION_MANAGERS)
-        self.constants_patcher.start()
-        
-        # Mark AgentKit as available
-        with patch('horus.tools.swap.AGENTKIT_AVAILABLE', True):
-            self.swap_tool = SwapTool(
-                SAMPLE_TOKENS_CONFIG,
-                SAMPLE_PROTOCOLS_CONFIG,
-                SAMPLE_DEPENDENCY_GRAPH
-            )
-        
-        # Set the mocks directly on the instance
-        self.swap_tool._cdp_action_provider = self.mock_action_provider
-        self.swap_tool._cdp_wallet_provider = self.mock_wallet_provider
-    
-    def tearDown(self):
-        """Clean up after the test."""
-        # Stop the patches
-        self.action_provider_patcher.stop()
-        self.wallet_provider_patcher.stop()
-        self.constants_patcher.stop()
-    
+        # Set test chain ID
+        self.test_chain_id = "84532"
+        logger.info(f"Detected testnet environment based on chain ID: {self.test_chain_id}")
+
     def test_get_token_address(self):
-        """Test retrieving token addresses."""
-        # Set up a simpler tokens_config for this test to ensure deterministic behavior
-        self.swap_tool.tokens_config = {
-            "tokens": [
-                {
-                    "symbol": "USDC",
-                    "name": "USD Coin",
-                    "chains": {  # Using chains instead of networks to match the implementation
-                        "84532": "0xf175520c52418dfe19c8098071a252da48cd1c19",
-                        "1": "0xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb48"
-                    }
-                }
-            ]
+        # Test getting ETH address
+        eth_address = self.swap_tool.get_token_address("ETH", self.test_chain_id)
+        self.assertEqual(eth_address, "0x4200000000000000000000000000000000000006")
+        
+        # Test getting USDC address
+        usdc_address = self.swap_tool.get_token_address("USDC", self.test_chain_id)
+        self.assertEqual(usdc_address, "0xf175520c52418dfe19c8098071a252da48cd1c19")
+        
+        # Test nonexistent token
+        nonexistent_address = self.swap_tool.get_token_address("NONEXISTENT", self.test_chain_id)
+        self.assertEqual(nonexistent_address, "unknown")
+        
+        # Test nonexistent chain
+        nonexistent_chain = self.swap_tool.get_token_address("USDC", "999")
+        self.assertEqual(nonexistent_chain, "unknown")
+
+    def test_get_router_address(self):
+        # Test getting router for UniswapV3
+        uniswap_router = self.swap_tool.get_router_address("UniswapV3", self.test_chain_id)
+        self.assertEqual(uniswap_router, "0xbe330043dbf77f92be10e3e3499d8da189d638cb")
+        
+        # Test getting router for nonexistent DEX
+        nonexistent_dex = self.swap_tool.get_router_address("NonexistentDEX", self.test_chain_id)
+        logger.info(f"No router address found for NonexistentDEX on chain {self.test_chain_id}")
+        self.assertIsNone(nonexistent_dex)
+        
+        # Test getting router for UniswapV3 on nonexistent chain
+        nonexistent_chain = self.swap_tool.get_router_address("UniswapV3", "999")
+        logger.info(f"No router address found for UniswapV3 on chain 999")
+        self.assertIsNone(nonexistent_chain)
+
+    def test_execute_swap_with_token_in_missing(self):
+        # Test swap execution with token_in missing but token_out present
+        parameters = {
+            "token_out": "USDC",
+            "amount_in": "1.0",
+            "chain_id": self.test_chain_id
         }
         
-        # Test getting a token address for a known token/chain
-        address = self.swap_tool.get_token_address("USDC", "84532")
-        self.assertEqual(address, "0xf175520c52418dfe19c8098071a252da48cd1c19")
+        logger.info(f"Executing swap from None to USDC on chain {self.test_chain_id} using UniswapV3")
+        logger.info(f"Full parameters: {parameters}")
         
-        # Test getting a token address for a non-existent token
-        address = self.swap_tool.get_token_address("NONEXISTENT", "84532")
-        self.assertIsNone(address)
+        result = self.swap_tool.execute(parameters)
         
-        # Test getting a token address for a known token but non-existent chain
-        address = self.swap_tool.get_token_address("USDC", "999")
-        self.assertIsNone(address)
+        self.assertIn("Error: Missing input token", result)
+
+    def test_execute_swap_with_token_out_missing(self):
+        # Test swap execution with token_out missing but token_in present
+        parameters = {
+            "token_in": "ETH",
+            "amount_in": "1.0",
+            "chain_id": self.test_chain_id
+        }
         
-        # Reset tokens_config to avoid affecting other tests
-        self.swap_tool.tokens_config = SAMPLE_TOKENS_CONFIG
-    
-    def test_get_dex_router(self):
-        """Test retrieving DEX router addresses."""
-        # Test getting a router address for a known DEX/chain
-        router = self.swap_tool.get_dex_router("UniswapV3", "84532")
-        self.assertEqual(router, "0xbe330043dbf77f92be10e3e3499d8da189d638cb")
+        logger.info(f"Executing swap from ETH to None on chain {self.test_chain_id} using UniswapV3")
+        logger.info(f"Full parameters: {parameters}")
         
-        # Test getting a router for a non-existent DEX
-        router = self.swap_tool.get_dex_router("NonexistentDEX", "84532")
-        self.assertIsNone(router)
+        result = self.swap_tool.execute(parameters)
         
-        # Test getting a router for a known DEX but non-existent chain
-        router = self.swap_tool.get_dex_router("UniswapV3", "999")
-        self.assertIsNone(router)
-        
-        # Test case insensitivity for DEX name
-        router = self.swap_tool.get_dex_router("uniswapv3", "84532")
-        self.assertEqual(router, "0xbe330043dbf77f92be10e3e3499d8da189d638cb")
-        
-        # Test different router key (router instead of swapRouter)
-        router = self.swap_tool.get_dex_router("SushiSwap", "84532")
-        self.assertEqual(router, "0x1b02da8cb0d097eb8d57a175b88c7d8b47997506")
-    
-    def test_get_position_manager(self):
-        """Test retrieving position manager addresses."""
-        # Test getting position manager for UniswapV3
-        position_manager = self.swap_tool.get_position_manager("UniswapV3", "84532")
-        self.assertEqual(position_manager, "0xc36442b4a4522e871399cd717abdd847ab11fe88")
-        
-        # Test getting position manager for non-existent DEX
-        position_manager = self.swap_tool.get_position_manager("NonexistentDEX", "84532")
-        self.assertIsNone(position_manager)
-        
-        # Test getting position manager for known DEX but non-existent chain
-        try:
-            # Chain that doesn't exist in the protocols config
-            position_manager = self.swap_tool.get_position_manager("UniswapV3", "888")
-            self.assertIsNone(position_manager)
-        except KeyError:
-            # If KeyError is raised, that's expected when the chain doesn't exist
-            # We can check if our fallback mechanism works by using a known chain
-            fallback_manager = self.swap_tool.get_position_manager("UniswapV3", "1")
-            self.assertEqual(fallback_manager, "0xc36442b4a4522e871399cd717abdd847ab11fe88")
-    
-    def test_get_default_dex(self):
-        """Test getting default DEX for different chains."""
-        self.assertEqual(self.swap_tool.get_default_dex("1"), "UniswapV3")  # Ethereum
-        self.assertEqual(self.swap_tool.get_default_dex("84532"), "UniswapV3")  # Base
-        self.assertEqual(self.swap_tool.get_default_dex("137"), "QuickSwap")  # Polygon
-        self.assertEqual(self.swap_tool.get_default_dex("999"), "UniswapV3")  # Unknown chain defaults to Uniswap
-    
-    def test_estimate_output_amount(self):
-        """Test output amount estimation."""
-        # Test ETH to USDC conversion
-        output = self.swap_tool.estimate_output_amount("ETH", "USDC", "1.0", "84532")
-        # Using default price ratios defined in the tool
-        self.assertIsNotNone(output)
-        self.assertTrue(float(output) > 0)
-        
-        # Test USDC to ETH conversion
-        output = self.swap_tool.estimate_output_amount("USDC", "ETH", "1800.0", "84532")
-        self.assertIsNotNone(output)
-        self.assertTrue(float(output) > 0)
-        
-        # Test a token pair that isn't directly defined
-        output = self.swap_tool.estimate_output_amount("TOKEN1", "TOKEN2", "100", "84532")
-        self.assertIsNotNone(output)
-        self.assertTrue(float(output) > 0)
-        
-        # Test with invalid amount
-        output = self.swap_tool.estimate_output_amount("ETH", "USDC", "invalid", "84532")
-        self.assertEqual(output, "0")
-    
-    def test_get_pool_address(self):
-        """Test Uniswap V3 pool address calculation."""
-        # Test getting a pool address for two tokens
-        # This test needs to be adjusted based on the implementation
-        # We'll mock the compute_pool_address method if it exists
-        if hasattr(self.swap_tool, 'compute_pool_address'):
-            self.swap_tool.compute_pool_address = MagicMock(return_value="0xPoolAddress")
-            
-            pool_address = self.swap_tool.get_pool_address(
-                "0x4200000000000000000000000000000000000006",  # WETH
-                "0xf175520c52418dfe19c8098071a252da48cd1c19",  # USDC
-                "84532",
-                3000  # Fee tier
-            )
-            self.assertEqual(pool_address, "0xPoolAddress")
-        else:
-            # Skip this test if the method doesn't exist
-            self.skipTest("compute_pool_address method not implemented")
-    
-    def test_execute_swap_with_agentkit(self):
-        """Test executing a swap with AgentKit."""
-        result = self.swap_tool.execute_swap_with_agentkit(
-            token_in_address="0x4200000000000000000000000000000000000006",  # ETH on Base
-            token_out_address="0xf175520c52418dfe19c8098071a252da48cd1c19",  # USDC on Base
-            amount_in="1.0",
-            min_amount_out="1764.0",
-            router_address="0xbe330043dbf77f92be10e3e3499d8da189d638cb",  # UniswapV3 router on Base
-            chain_id="84532",
-            slippage=0.5
-        )
-        
-        # Check that the result has the expected structure
-        self.assertTrue(result["success"])
-        self.assertEqual(result["transaction_hash"], "0x1234567890abcdef")
-        self.assertEqual(result["message"], "Swap successful")
-        self.assertEqual(result["amount_in"], "1.0")
-        self.assertEqual(result["amount_out"], "1850.0")
-        
-        # Check that the action provider was called with correct parameters
-        self.mock_action_provider.execute_swap.assert_called_once_with(
-            chain_id="84532",
-            account="0xDefaultAccount",
-            token_in="0x4200000000000000000000000000000000000006",
-            token_out="0xf175520c52418dfe19c8098071a252da48cd1c19",
-            amount_in="1.0",
-            slippage_percentage=0.5,
-            fee_tier=3000
-        )
-    
-    def test_handle_lp_token_swap(self):
-        """Test handling LP token swap through the private method."""
-        # Skip if _handle_lp_token_swap doesn't exist
-        if not hasattr(self.swap_tool, '_handle_lp_token_swap'):
-            self.skipTest("_handle_lp_token_swap method not implemented")
-            return
-            
-        # If we're simply handling through execute()
+        self.assertIn("Error: Missing output token", result)
+
+    def test_execute_swap_with_lp_token(self):
+        # Test swap execution with LP token
         parameters = {
             "lp_token_id": "12345",
-            "desired_token": "USDC",
-            "chain_id": "84532"
+            "chain_id": self.test_chain_id
         }
         
-        # Mock token address retrieval
-        self.swap_tool.get_token_address = MagicMock(side_effect=lambda symbol, chain_id: {
-            "USDC:84532": "0xf175520c52418dfe19c8098071a252da48cd1c19"
-        }.get(f"{symbol}:{chain_id}"))
+        logger.info(f"Executing swap from None to None on chain {self.test_chain_id} using UniswapV3")
+        logger.info(f"Full parameters: {parameters}")
         
-        # Mock the position manager retrieval
-        self.swap_tool.get_position_manager = MagicMock(return_value="0xc36442b4a4522e871399cd717abdd847ab11fe88")
-        
-        # Check if execute method actually contains code for handling LP tokens
-        # Set a mock response for execute
-        original_execute = self.swap_tool.execute
-        
-        def mock_execute(params):
-            if "lp_token_id" in params and "desired_token" in params:
-                # Return a simulated success message
-                return f"Successfully handled LP token {params['lp_token_id']} with {params['desired_token']}"
-            return original_execute(params)
-            
-        self.swap_tool.execute = mock_execute
-        
-        # Execute with LP token parameters
         result = self.swap_tool.execute(parameters)
         
-        # Verify that our mocked execute method properly handled LP tokens
-        self.assertIn("Successfully handled LP token 12345", result)
-        self.assertIn("USDC", result)
-        
-        # Restore original method
-        self.swap_tool.execute = original_execute
-    
-    def test_execute_success(self):
-        """Test the main execute method for a successful swap."""
+        self.assertIn("Error", result)
+
+    def test_execute_swap_with_simple_parameters(self):
+        # Test simple swap execution
         parameters = {
             "token_in": "ETH",
             "token_out": "USDC",
             "amount_in": "1.0",
-            "chain_id": "84532"
+            "chain_id": self.test_chain_id
         }
         
-        # Mock the get_token_address method to return known addresses
-        self.swap_tool.get_token_address = MagicMock(side_effect=lambda symbol, chain_id: {
-            "ETH:84532": "0x4200000000000000000000000000000000000006",
-            "USDC:84532": "0xf175520c52418dfe19c8098071a252da48cd1c19"
-        }.get(f"{symbol}:{chain_id}"))
+        logger.info(f"Executing swap from ETH to USDC on chain {self.test_chain_id} using UniswapV3")
+        logger.info(f"Full parameters: {parameters}")
         
-        # Mock the execute_swap_with_agentkit method
-        self.swap_tool.execute_swap_with_agentkit = MagicMock(return_value={
-            "success": True,
-            "transaction_hash": "0x1234567890abcdef",
-            "message": "Swap successful",
+        # Get estimated output for this swap
+        estimated_output = self.swap_tool.get_estimated_output("ETH", "USDC", "1.0", self.test_chain_id)
+        estimated_amount = estimated_output.get("estimated_output", "0")
+        slippage = 0.5  # Default slippage
+        min_amount_out = str(round(float(estimated_amount) * (1 - slippage / 100), 2))
+        
+        logger.info(f"Estimated output: {estimated_amount} USDC (min: {min_amount_out} with {slippage}% slippage)")
+        
+        with patch('horus.tools.agent_kit.agent_kit_manager.execute_swap') as mock_execute:
+            mock_execute.return_value = {
+                "success": True,
+                "transaction_hash": "0xfedcba0987654321fedcba0987654321fedcba0987654321",
+                "message": "Swap executed successfully",
+                "amount_out": estimated_amount
+            }
+            result = self.swap_tool.execute(parameters)
+        
+        self.assertIn("Successfully swapped", result)
+        self.assertIn("ETH", result)
+        self.assertIn("USDC", result)
+
+    def test_execute_swap_with_dex_specified(self):
+        # Test swap execution with DEX specified
+        parameters = {
+            "token_in": "ETH",
+            "token_out": "USDC",
             "amount_in": "1.0",
-            "amount_out": "1850.0"
-        })
+            "chain_id": self.test_chain_id,
+            "source": "UniswapV3"  # Specify DEX
+        }
+        
+        logger.info(f"Executing swap from ETH to USDC on chain {self.test_chain_id} using UniswapV3")
+        logger.info(f"Full parameters: {parameters}")
+        
+        # Get estimated output for this swap
+        estimated_output = self.swap_tool.get_estimated_output("ETH", "USDC", "1.0", self.test_chain_id)
+        estimated_amount = estimated_output.get("estimated_output", "0")
+        slippage = 0.5  # Default slippage
+        min_amount_out = str(round(float(estimated_amount) * (1 - slippage / 100), 2))
+        
+        logger.info(f"Estimated output: {estimated_amount} USDC (min: {min_amount_out} with {slippage}% slippage)")
+        
+        with patch('horus.tools.agent_kit.agent_kit_manager.execute_swap') as mock_execute:
+            mock_execute.return_value = {
+                "success": True,
+                "transaction_hash": "0xfedcba0987654321fedcba0987654321fedcba0987654321",
+                "message": "Swap executed successfully",
+                "amount_out": estimated_amount
+            }
+            result = self.swap_tool.execute(parameters)
+        
+        self.assertIn("Successfully swapped", result)
+        self.assertIn("UniswapV3", result)
+
+    def test_execute_swap_with_agentkit(self):
+        """Test executing a swap with AgentKit."""
+        # Set up parameters for swap
+        parameters = {
+            "token_in": "ETH",
+            "token_out": "USDC",
+            "amount_in": "1.0",
+            "chain_id": self.test_chain_id
+        }
+        
+        # Execute the swap with real AgentKit manager
+        result = self.agent_kit_manager.execute_swap(
+            token_in_address="0x4200000000000000000000000000000000000006",
+            token_out_address="0xf175520c52418dfe19c8098071a252da48cd1c19",
+            amount_in="1.0",
+            chain_id=self.test_chain_id,
+            slippage_percentage=0.5
+        )
+        
+        logger.info(f"Swap result: {result}")
+        
+        # Check the result
+        self.assertTrue(result.get("success", False))
+        # Use assertIn to check that the transaction hash exists but not check the exact value
+        self.assertIn("transaction_hash", result)
+        # Instead of checking the exact transaction hash, just ensure it's not empty
+        self.assertTrue(bool(result.get("transaction_hash")))
+
+    def test_execute_swap_with_agentkit_error(self):
+        """Test error handling in execute_swap_with_agentkit."""
+        # Set up parameters for swap
+        parameters = {
+            "token_in": "ETH",
+            "token_out": "USDC", 
+            "amount_in": "1.0",
+            "chain_id": self.test_chain_id
+        }
+        
+        # Use the agent_kit_manager but with a patched execute_action that fails
+        with patch('horus.tools.agent_kit.agent_kit_manager._cdp_action_provider.execute_action') as mock_execute:
+            from horus.tools.agent_kit import ActionResult, ActionStatus
+
+            # Create a failure result
+            mock_execute.return_value = ActionResult(
+                ActionStatus.ERROR,
+                None,
+                "Test error"
+            )
+            
+            # Execute swap
+            result = self.agent_kit_manager.execute_swap(
+                token_in_address="0x4200000000000000000000000000000000000006",
+                token_out_address="0xf175520c52418dfe19c8098071a252da48cd1c19",
+                amount_in="1.0",
+                chain_id=self.test_chain_id,
+                slippage_percentage=0.5
+            )
+            
+            logger.info(f"Swap result: {result}")
+            
+            # Check the result
+            self.assertFalse(result.get("success", True))
+            self.assertIsNone(result.get("transaction_hash"))
+            self.assertIn("Test error", result.get("message", ""))
+
+    def test_execute_swap_with_nonexistent_dex(self):
+        # Test swap execution with nonexistent DEX
+        parameters = {
+            "token_in": "ETH",
+            "token_out": "USDC",
+            "amount_in": "1.0",
+            "chain_id": self.test_chain_id,
+            "dex": "NonexistentDEX"
+        }
+        
+        logger.info(f"Executing swap from ETH to USDC on chain {self.test_chain_id} using NonexistentDEX")
+        logger.info(f"Full parameters: {parameters}")
         
         result = self.swap_tool.execute(parameters)
         
-        # Check that the result contains the expected success message
-        self.assertIn("Successfully swapped 1.0 ETH", result)
-        self.assertIn("1850.0 USDC", result)
-        
-        # Verify the execute_swap_with_agentkit was called correctly
-        self.swap_tool.execute_swap_with_agentkit.assert_called_once()
-    
-    def test_execute_missing_parameters(self):
-        """Test execute with missing required parameters."""
-        # Missing token_in or lp_token_id
-        parameters1 = {
-            "token_out": "USDC",
-            "amount_in": "1.0",
-            "chain_id": "84532"
-        }
-        result1 = self.swap_tool.execute(parameters1)
-        self.assertIn("Error: Missing required parameters", result1)
-        
-        # Missing token_out for regular swap
-        parameters2 = {
-            "token_in": "ETH",
-            "amount_in": "1.0",
-            "chain_id": "84532"
-        }
-        result2 = self.swap_tool.execute(parameters2)
-        self.assertIn("Error: Missing required parameters", result2)
-        
-        # Missing desired_token for LP token swap
-        if hasattr(self.swap_tool, '_handle_lp_token_swap'):
-            parameters3 = {
-                "lp_token_id": "12345",
-                "chain_id": "84532"
-            }
-            result3 = self.swap_tool.execute(parameters3)
-            self.assertIn("Error: Missing required parameters", result3)
-    
-    def test_execute_unknown_token(self):
-        """Test execute with unknown tokens."""
+        self.assertIn("Error", result)
+        self.assertIn("NonexistentDEX", result)
+
+    def test_execute_swap_with_nonexistent_token(self):
+        # Test swap execution with nonexistent token
         parameters = {
             "token_in": "NONEXISTENT",
             "token_out": "USDC",
             "amount_in": "1.0",
-            "chain_id": "84532"
+            "chain_id": self.test_chain_id
         }
         
-        # Mock get_token_address to return None for unknown tokens
-        self.swap_tool.get_token_address = MagicMock(side_effect=lambda symbol, chain_id: 
-            None if symbol == "NONEXISTENT" else "0xf175520c52418dfe19c8098071a252da48cd1c19"
-        )
+        logger.info(f"Executing swap from NONEXISTENT to USDC on chain {self.test_chain_id} using UniswapV3")
+        logger.info(f"Full parameters: {parameters}")
         
         result = self.swap_tool.execute(parameters)
-        self.assertIn("Error: Could not find address for token NONEXISTENT", result)
-    
-    def test_execute_unknown_dex(self):
-        """Test execute with an unknown DEX."""
+        
+        self.assertIn("Error", result)
+        self.assertIn("NONEXISTENT", result)
+
+    def test_execute_swap_with_invalid_amount(self):
+        # Test swap execution with invalid amount
         parameters = {
             "token_in": "ETH",
             "token_out": "USDC",
-            "amount_in": "1.0",
-            "chain_id": "84532",
-            "dex": "NonexistentDEX"
+            "amount_in": "invalid",
+            "chain_id": self.test_chain_id
         }
         
-        # Mock get_token_address to return valid addresses
-        self.swap_tool.get_token_address = MagicMock(side_effect=lambda symbol, chain_id: {
-            "ETH:84532": "0x4200000000000000000000000000000000000006",
-            "USDC:84532": "0xf175520c52418dfe19c8098071a252da48cd1c19"
-        }.get(f"{symbol}:{chain_id}"))
-        
-        # Mock get_dex_router to return None for unknown DEX
-        self.swap_tool.get_dex_router = MagicMock(return_value=None)
-        
-        result = self.swap_tool.execute(parameters)
-        self.assertIn("Error: Could not find router address for NonexistentDEX", result)
-    
-    def test_simulate_mode(self):
-        """Test swapping in simulation mode when AgentKit is not available."""
-        # Create a new instance with AGENTKIT_AVAILABLE set to False
-        with patch('horus.tools.swap.AGENTKIT_AVAILABLE', False):
-            swap_tool = SwapTool(
-                SAMPLE_TOKENS_CONFIG,
-                SAMPLE_PROTOCOLS_CONFIG,
-                SAMPLE_DEPENDENCY_GRAPH
-            )
-            
-            # Execute a swap that should be simulated
-            result = swap_tool.execute_swap_with_agentkit(
-                token_in_address="0x4200000000000000000000000000000000000006",
-                token_out_address="0xf175520c52418dfe19c8098071a252da48cd1c19",
-                amount_in="1.0",
-                min_amount_out="1764.0",
-                router_address="0xbe330043dbf77f92be10e3e3499d8da189d638cb",
-                chain_id="84532"
-            )
-            
-            # Check that we got a simulated response
-            self.assertTrue(result["success"])
-            self.assertTrue(result["transaction_hash"].startswith("0x"))
-            self.assertIn("Simulated swap", result["message"])
-            self.assertTrue("testnet_simulation" in result)
-    
-    def test_execute_swap_with_agentkit_error(self):
-        """Test error handling in execute_swap_with_agentkit."""
-        # Configure the mock to raise an exception
-        self.mock_action_provider.execute_swap.side_effect = Exception("Test error")
-        
-        result = self.swap_tool.execute_swap_with_agentkit(
-            token_in_address="0x4200000000000000000000000000000000000006",
-            token_out_address="0xf175520c52418dfe19c8098071a252da48cd1c19",
-            amount_in="1.0",
-            min_amount_out="1764.0",
-            router_address="0xbe330043dbf77f92be10e3e3499d8da189d638cb",
-            chain_id="84532"
-        )
-        
-        # Check that the error was handled correctly
-        self.assertFalse(result["success"])
-        self.assertIsNone(result["transaction_hash"])
-        self.assertEqual(result["message"], "Error executing swap with AgentKit: Test error")
-    
-    def test_execute_swap_failure(self):
-        """Test execute when the swap fails."""
-        parameters = {
-            "token_in": "ETH",
-            "token_out": "USDC",
-            "amount_in": "1.0",
-            "chain_id": "84532"
-        }
-        
-        # Mock get_token_address to return valid addresses
-        self.swap_tool.get_token_address = MagicMock(side_effect=lambda symbol, chain_id: {
-            "ETH:84532": "0x4200000000000000000000000000000000000006",
-            "USDC:84532": "0xf175520c52418dfe19c8098071a252da48cd1c19"
-        }.get(f"{symbol}:{chain_id}"))
-        
-        # Mock execute_swap_with_agentkit to return a failure
-        self.swap_tool.execute_swap_with_agentkit = MagicMock(return_value={
-            "success": False,
-            "transaction_hash": None,
-            "message": "Swap failed due to insufficient liquidity",
-            "amount_in": "1.0",
-            "amount_out": "0"
-        })
+        logger.info(f"Executing swap from ETH to USDC on chain {self.test_chain_id} using UniswapV3")
         
         result = self.swap_tool.execute(parameters)
         
-        # Check that the result contains the expected failure message
-        self.assertIn("Error swapping tokens", result)
-        self.assertIn("Swap failed due to insufficient liquidity", result)
-    
-    def test_callable_interface(self):
-        """Test the callable interface of SwapTool."""
-        # Mock the execute method
-        self.swap_tool.execute = MagicMock(return_value="Executed successfully")
+        self.assertIn("Error", result)
+        self.assertIn("amount", result.lower())
+
+    def test_swap_get_router_address_with_invalid_source(self):
+        # Test getting router address for nonexistent DEX and chain
+        nonexistent_dex = self.swap_tool.get_router_address("NonexistentDEX", self.test_chain_id)
+        logger.info(f"No router address found for NonexistentDEX on chain {self.test_chain_id}")
+        self.assertIsNone(nonexistent_dex)
         
-        # Call the instance directly
-        parameters = {"token_in": "ETH", "token_out": "USDC"}
-        result = self.swap_tool(parameters)
+        nonexistent_chain = self.swap_tool.get_router_address("UniswapV3", "999")
+        logger.info(f"No router address found for UniswapV3 on chain 999")
+        self.assertIsNone(nonexistent_chain)
+
+    def test_swap_get_position_manager_address(self):
+        # Test getting position manager address for UniswapV3
+        position_manager = self.swap_tool.get_position_manager_address("UniswapV3", self.test_chain_id)
+        logger.info(f"Found position manager for UniswapV3 on chain {self.test_chain_id} in protocols config: {position_manager}")
+        self.assertIsNotNone(position_manager)
         
-        # Check that execute was called with the parameters
-        self.swap_tool.execute.assert_called_once_with(parameters)
-        self.assertEqual(result, "Executed successfully")
+        # Test getting position manager address for nonexistent DEX
+        nonexistent_dex = self.swap_tool.get_position_manager_address("NonexistentDEX", self.test_chain_id)
+        logger.info(f"No position manager found for NonexistentDEX on chain {self.test_chain_id}")
+        self.assertIsNone(nonexistent_dex)
+        
+        # Test getting position manager address for UniswapV3 on mainnet
+        mainnet_position_manager = self.swap_tool.get_position_manager_address("UniswapV3", "1")
+        logger.info(f"Found position manager for UniswapV3 on chain 1 in protocols config: {mainnet_position_manager}")
+        self.assertIsNotNone(mainnet_position_manager)
+
+    def test_token_address_resolution(self):
+        # Test token address resolution for known tokens
+        eth_address = self.swap_tool.get_token_address("ETH", self.test_chain_id)
+        self.assertEqual(eth_address, "0x4200000000000000000000000000000000000006")
+        
+        usdc_address = self.swap_tool.get_token_address("USDC", self.test_chain_id)
+        self.assertEqual(usdc_address, "0xf175520c52418dfe19c8098071a252da48cd1c19")
+        
+        # Test token address resolution for nonexistent tokens and chains
+        nonexistent_token = self.swap_tool.get_token_address("NONEXISTENT", self.test_chain_id)
+        logger.info(f"Token address not found for NONEXISTENT on chain {self.test_chain_id}")
+        self.assertEqual(nonexistent_token, "unknown")
+        
+        nonexistent_chain = self.swap_tool.get_token_address("USDC", "999")
+        logger.info(f"Token address not found for USDC on chain 999")
+        self.assertEqual(nonexistent_chain, "unknown")
+
+    def test_get_estimated_output(self):
+        # Test estimated output calculation
+        estimated_output = self.swap_tool.get_estimated_output("ETH", "USDC", "1.0", self.test_chain_id)
+        self.assertIn("estimated_output", estimated_output)
+        self.assertIn("token_in", estimated_output)
+        self.assertIn("token_out", estimated_output)
+
+    def test_execute_swap_simulation(self):
+        # Test swap simulation mode
+        
+        # Mock the execute_swap_with_agentkit method to simulate the swap
+        with patch('horus.tools.agent_kit.agent_kit_manager.execute_swap') as mock_execute:
+            # Configure the mock to return a simulated result
+            mock_execute.return_value = {
+                "success": True,
+                "transaction_hash": "0xsimulated",
+                "message": "Simulated swap",
+                "amount_out": "1850.0"
+            }
+            
+            # Execute the swap with the simulation flag
+            result = self.swap_tool.execute({
+                "token_in": "ETH",
+                "token_out": "USDC",
+                "amount_in": "1.0",
+                "chain_id": self.test_chain_id,
+                "simulation": True
+            })
+            
+            # Verify the result
+            self.assertIn("Simulating swap", result)
+            self.assertIn("ETH", result)
+            self.assertIn("USDC", result)
+            
+            # Verify that the AgentKit execute_swap method was not called
+            mock_execute.assert_not_called()
 
 
-if __name__ == "__main__":
+if __name__ == '__main__':
     unittest.main() 

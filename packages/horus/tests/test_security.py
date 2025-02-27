@@ -165,63 +165,27 @@ class TestSecurity(unittest.TestCase):
     
     def setUp(self):
         """Set up the test."""
-        # Create mock for OpenAI client
-        self.mock_openai_client = MagicMock()
-        
-        # Mock the response from OpenAI
-        mock_response = MagicMock()
-        mock_response.choices = [MagicMock()]
-        mock_response.choices[0].message = MagicMock()
-        mock_response.choices[0].message.content = json.dumps({
-            "action_plan": [
-                {
-                    "action": "withdrawal",
-                    "parameters": {
-                        "token": "USDC-USDT-LP",
-                        "amount": "ALL",
-                        "chain_id": "84532"
-                    }
-                }
-            ]
-        })
-        self.mock_openai_client.chat.completions.create.return_value = mock_response
-        
-        # Create patches for file operations
-        self.open_patcher = patch('builtins.open', new_callable=mock_open, read_data=json.dumps({}))
+        # Mock open to avoid file system access
+        self.open_patcher = patch('builtins.open', mock_open(read_data='{}'))
         self.mock_open = self.open_patcher.start()
         
-        # Create patch for file existence check
+        # Mock os.path.exists to always return True
         self.exists_patcher = patch('os.path.exists', return_value=True)
-        self.mock_exists = self.exists_patcher.start()
+        self.exists_patcher.start()
         
-        # Create patch for directory path operations
-        self.dirname_patcher = patch('os.path.dirname', return_value='/mocked/path')
-        self.mock_dirname = self.dirname_patcher.start()
+        # Mock os.path.dirname to avoid file system access
+        self.dirname_patcher = patch('os.path.dirname', return_value='/mock/path')
+        self.dirname_patcher.start()
         
-        # Create patch for joining paths
-        self.join_patcher = patch('os.path.join', return_value='/mocked/path/to/file.json')
-        self.mock_join = self.join_patcher.start()
+        # Mock os.path.join to avoid file system access
+        self.join_patcher = patch('os.path.join', side_effect=lambda *args: '/'.join(args))
+        self.join_patcher.start()
         
-        # Configure the file reads based on the path
-        def mock_file_read(file_path, *args, **kwargs):
-            mock_file = MagicMock()
-            mock_file.__enter__ = MagicMock()
-            
-            if 'dependency_graph' in str(file_path):
-                mock_file.__enter__.return_value.read.return_value = json.dumps(SAMPLE_DEPENDENCY_GRAPH)
-            elif 'user_balances' in str(file_path):
-                mock_file.__enter__.return_value.read.return_value = json.dumps(SAMPLE_USER_BALANCES)
-            elif 'tokens' in str(file_path):
-                mock_file.__enter__.return_value.read.return_value = json.dumps(SAMPLE_TOKENS_CONFIG)
-            elif 'protocols' in str(file_path):
-                mock_file.__enter__.return_value.read.return_value = json.dumps(SAMPLE_PROTOCOLS_CONFIG)
-            else:
-                mock_file.__enter__.return_value.read.return_value = json.dumps({})
-                
-            mock_file.__exit__ = MagicMock(return_value=False)
-            return mock_file
-            
-        self.mock_open.side_effect = mock_file_read
+        # Create a mock OpenAI client
+        self.mock_openai_client = MagicMock()
+        self.mock_openai_client.chat.completions.create.return_value.choices = [
+            MagicMock(message=MagicMock(content="Mock response"))
+        ]
         
         # Create the security agent with mocked dependencies
         self.security_agent = SecurityAgent(self.mock_openai_client, mock_openai=True)
@@ -238,6 +202,13 @@ class TestSecurity(unittest.TestCase):
         self.exists_patcher.stop()
         self.dirname_patcher.stop()
         self.join_patcher.stop()
+        
+        # Reset mocks between tests to avoid unexpected call counts
+        if hasattr(self, 'security_agent'):
+            self.security_agent.withdrawal_tool.reset_mock()
+            self.security_agent.revoke_tool.reset_mock()
+            self.security_agent.swap_tool.reset_mock()
+            self.security_agent.monitor_tool.reset_mock()
     
     def test_security_alert(self):
         """Test processing a security alert."""
@@ -246,6 +217,9 @@ class TestSecurity(unittest.TestCase):
         CRITICAL SECURITY ALERT: Vulnerability found in Beefy protocol. 
         All funds at risk. Immediate action required.
         """
+        
+        # Reset mock call counts from previous tests
+        self.security_agent.withdrawal_tool.reset_mock()
         
         # Process the alert
         result = self.security_agent.process_alert(alert)

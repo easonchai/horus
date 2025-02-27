@@ -8,6 +8,7 @@ authors = ["Your Name <your.email@example.com>"]
 python = "^3.10.12"
 coinbase-agentkit = {version = "^0.1.4.dev202502250", allow-prereleases = true}
 coinbase-agentkit-langchain = {version = "^0.1.1.dev2025022120250221202502212", allow-prereleases = true}
+eth-account = ">=0.8.0"
 openai = "^1.64.0"
 python-dotenv = "^1.0.1"
 tweepy = "^4.14.0"

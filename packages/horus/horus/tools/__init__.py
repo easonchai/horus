@@ -1,14 +1,15 @@
 """
 Tools for the Horus security system.
 """
-from .withdrawal import create_withdrawal_tool, withdrawal_tool
+from .monitor import MonitorTool, create_monitor_tool
 from .revoke import RevokeTool
-from .monitor import create_monitor_tool, monitor_tool
+from .swap import SwapTool
+from .withdrawal import WithdrawalTool
 
 __all__ = [
-    'create_withdrawal_tool',
-    'withdrawal_tool',
     'RevokeTool',
+    'SwapTool',
+    'MonitorTool',
     'create_monitor_tool',
-    'monitor_tool',
+    'WithdrawalTool',
 ]
