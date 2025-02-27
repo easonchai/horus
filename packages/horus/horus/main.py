@@ -10,6 +10,10 @@ import sys
 logging.basicConfig(level=logging.INFO, format='[%(asctime)s] %(message)s')
 logger = logging.getLogger(__name__)
 
+# Import and re-export the setup_agent function for backward compatibility
+from horus.agent_setup import setup_agent
+
+
 def main():
     """Main entry point for the Horus security monitoring agent."""
     try:

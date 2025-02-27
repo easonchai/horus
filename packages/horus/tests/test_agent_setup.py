@@ -6,14 +6,14 @@ from unittest.mock import MagicMock, patch
 # Add the parent directory to the path so we can import the horus module
 sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
-from horus.main import setup_agent
+from horus.agent_setup import setup_agent
 
 
 class TestAgentSetup(unittest.TestCase):
     """Test the agent setup functionality."""
 
-    @patch('horus.main.os.getenv')
-    @patch('horus.main.OpenAI')
+    @patch('horus.agent_setup.os.getenv')
+    @patch('horus.agent_setup.OpenAI')
     def test_setup_agent_with_env_vars(self, mock_openai, mock_getenv):
         """Test that the agent setup works when environment variables are set."""
         # Mock environment variables
@@ -61,8 +61,8 @@ class TestAgentSetup(unittest.TestCase):
             self.assertIsNotNone(result)
             mock_openai.assert_called_once_with(api_key='test_openai_key')
 
-    @patch('horus.main.os.getenv')
-    @patch('horus.main.print')
+    @patch('horus.agent_setup.os.getenv')
+    @patch('horus.agent_setup.print')
     def test_setup_agent_missing_env_vars(self, mock_print, mock_getenv):
         """Test that the agent setup fails when environment variables are missing."""
         # Mock missing environment variables
