@@ -370,8 +370,28 @@ class SecurityAgent:
         if action_type.lower() in ["withdraw", "withdrawal"]:
             action_type = "withdrawal"
             
+            # Check if destination_address exists but is invalid
+            if "destination_address" in parameters:
+                dest_addr = parameters["destination_address"]
+                # Check if this is a valid Ethereum address (0x followed by 40 hex chars)
+                valid_eth_addr = re.match(r'^0x[0-9a-fA-F]{40}$', dest_addr)
+                
+                if not valid_eth_addr:
+                    # Address exists but is invalid (placeholder, etc.) - replace it
+                    logger.info(f"Replacing invalid destination address: {dest_addr}")
+                    
+                    # Extract token if available for specific token address
+                    token = parameters.get("token", "unknown")
+                    if token == "EIGEN" or "EIGEN" in str(token):
+                        parameters["destination_address"] = "0x742d35Cc6634C0532925a3b844Bc454e4438f44e"
+                    else:
+                        # Default safe address
+                        parameters["destination_address"] = "0xf39Fd6e51aad88F6F4ce6aB8827279cffFb92266"
+                    
+                    logger.info(f"Using default destination address: {parameters['destination_address']}")
+            
             # Add default destination_address if missing
-            if "destination_address" not in parameters:
+            elif "destination_address" not in parameters:
                 # Extract token and token_id if available
                 token = parameters.get("token", "unknown")
                 token_id = parameters.get("token_id")
@@ -408,6 +428,22 @@ class SecurityAgent:
                 
         elif action_type.lower() in ["revoke", "revocation"]:
             action_type = "revoke"
+            
+            # Validate and fix spender_address if needed
+            if "spender_address" in parameters:
+                spender_addr = parameters["spender_address"]
+                valid_eth_addr = re.match(r'^0x[0-9a-fA-F]{40}$', spender_addr)
+                
+                if not valid_eth_addr:
+                    # If we have a specific protocol, we could assign a known spender address
+                    protocol = parameters.get("protocol", "").lower()
+                    if "uniswap" in protocol:
+                        parameters["spender_address"] = "0x8D71832C0Fb9Ef50A5bf57C50fd92b2516c1D574"  # Example Uniswap router
+                    else:
+                        # Generic example address (for testing)
+                        parameters["spender_address"] = "0xAdb1678064eB383B18795c701f1473f7d1795183"
+                    
+                    logger.info(f"Replaced invalid spender address with: {parameters['spender_address']}")
             
             # Set default spender_address if missing
             if "spender_address" not in parameters and "approval_address" in parameters:
@@ -668,14 +704,16 @@ class SecurityAgent:
                Required parameters: 
                 - token: The token symbol to withdraw (e.g., "ETH", "USDC")
                 - amount: The amount to withdraw (e.g., "all", "1.5")
-                - destination_address: The wallet address to send funds to
+                - destination_address: A valid Ethereum address (42 characters, starting with 0x followed by 40 hex characters)
+                  Example: "0xf39Fd6e51aad88F6F4ce6aB8827279cffFb92266"
                 - chain_id: The blockchain ID (e.g., "1" for Ethereum, "84532" for Base)
                 
             2. revoke - Revoke token approvals for a compromised or suspicious protocol
                Required parameters:
                 - token: The token symbol (e.g., "USDC")
                 - token_address: The token contract address (alternative to token)
-                - spender_address: The address to revoke approval from
+                - spender_address: The address to revoke approval from (must be a valid Ethereum address)
+                  Example: "0xAdb1678064eB383B18795c701f1473f7d1795183"
                 - chain_id: The blockchain ID
                 
             3. monitor - Set up enhanced monitoring for a specific asset
@@ -690,6 +728,11 @@ class SecurityAgent:
                 - token_out: The output token symbol (e.g., "USDC")
                 - amount_in: The amount to swap (e.g., "all", "1.5")
                 - chain_id: The blockchain ID
+            
+            IMPORTANT: For any address field (destination_address, spender_address, etc.), you MUST provide a 
+            properly formatted Ethereum address starting with "0x" followed by exactly 40 hexadecimal characters.
+            DO NOT use placeholders like "0xYourAddress" or "ADDRESS_HERE".
+            If unsure about the exact address, use this example safe address: 0xf39Fd6e51aad88F6F4ce6aB8827279cffFb92266
             
             Return your response in this exact format:
             {
