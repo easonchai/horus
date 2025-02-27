@@ -37,11 +37,11 @@ class SecurityAgent:
     
     Args:
         openai_client: The OpenAI client.
-        mock_openai: Whether to mock OpenAI responses.
+        mock_openai: Whether to mock OpenAI responses. Should always be False in production.
         mock_twitter: Whether to mock Twitter responses.
         """
         self.openai_client = openai_client
-        self.mock_openai = mock_openai
+        self.mock_openai = False  # Always set to False to ensure real OpenAI is used
         self.mock_twitter = mock_twitter
         
         # Load configuration files
@@ -566,108 +566,6 @@ class SecurityAgent:
             # Default to monitoring in case of error
             return self._get_default_monitor_action()
     
-    def get_mock_response(self, alert_text: str) -> str:
-        """
-        Generate a mock response for testing purposes.
-        
-        Args:
-            alert_text: The text of the security alert.
-            
-        Returns:
-            A string describing the action taken.
-        """
-        logger.info("Generating mock response")
-        
-        # Extract keywords from the alert text to determine the appropriate action
-        alert_lower = alert_text.lower()
-        
-        if "withdraw" in alert_lower or "vulnerability" in alert_lower:
-            # For test_security_alert, return a simple string that matches the expected value
-            if "beefy protocol" in alert_lower and "all funds at risk" in alert_lower:
-                return "Funds withdrawn successfully"
-                
-            # For other tests, return a structured response
-            return json.dumps({
-                "action_plan": [
-                    {
-                        "action": "withdraw",
-                        "parameters": {
-                            "token": "USDC",
-                            "amount": "ALL",
-                            "destination": "safe_wallet",
-                            "chain_id": "84532",
-                            "user_address": "0xf39Fd6e51aad88F6F4ce6aB8827279cffFb92266"
-                        }
-                    }
-                ]
-            })
-            
-        elif "swap" in alert_lower or "convert" in alert_lower:
-            parameters = {
-                "token_in": "ETH",
-                "token_out": "USDC",
-                "amount_in": "1.5",
-                "chain_id": "84532"  # Base chain
-            }
-            
-            # For specific tests, return expected string
-            if "eth price volatility" in alert_lower:
-                return "Tokens swapped successfully"
-                
-            # For other tests, return structured response
-            return json.dumps({
-                "action_plan": [
-                    {
-                        "action": "swap",
-                        "parameters": parameters
-                    }
-                ]
-            })
-            
-        elif "revoke" in alert_lower or "approval" in alert_lower or "permission" in alert_lower:
-            parameters = {
-                "token": "USDC",
-                "token_address": "",
-                "protocol": "UniswapV3",
-                "chain_id": "84532",  # Base chain
-                "spender_address": ""
-            }
-            
-            # For specific tests, return expected string
-            if "revoke permissions immediately" in alert_lower:
-                return "Permissions revoked successfully"
-                
-            # For other tests, return structured response
-            return json.dumps({
-                "action_plan": [
-                    {
-                        "action": "revoke",
-                        "parameters": parameters
-                    }
-                ]
-            })
-            
-        else:  # Default to monitoring
-            parameters = {
-                "asset": "All Positions",
-                "duration": "24h",
-                "threshold": "5%"
-            }
-            
-            # For specific tests, return expected string
-            if "set up monitoring" in alert_lower:
-                return "Monitoring set up successfully"
-                
-            # For other tests, return structured response
-            return json.dumps({
-                "action_plan": [
-                    {
-                        "action": "monitor",
-                        "parameters": parameters
-                    }
-                ]
-            })
-    
     def process_alert(self, alert_text: str) -> str:
         """
         Process a security alert and take appropriate action.
@@ -684,93 +582,88 @@ class SecurityAgent:
         print(f"\033[1;33mAlert:\033[0m {alert_text}")
         print("-"*80)
         
-        # Mock OpenAI response when in mock mode
-        if self.mock_openai:
-            logger.info("\033[1;35m[MOCK MODE]\033[0m Using mock OpenAI response")
-            response = self.get_mock_response(alert_text)
-        else:
-            # Prepare context information for OpenAI
-            logger.info("\033[1;32m[ANALYSIS]\033[0m Preparing context for AI analysis...")
-            context = self.prepare_context_for_ai()
+        # Prepare context information for OpenAI
+        logger.info("\033[1;32m[ANALYSIS]\033[0m Preparing context for AI analysis...")
+        context = self.prepare_context_for_ai()
+        
+        # Create a system prompt
+        system_prompt = """
+        You are a cryptocurrency security agent tasked with protecting user funds. Analyze the security alert and 
+        determine the appropriate protective action to take. Your response should include a JSON object with an 
+        "action_plan" field.
+        
+        Available actions:
+        1. withdraw - Withdraw funds from a compromised protocol or token
+           Required parameters: 
+            - token: The token symbol to withdraw (e.g., "ETH", "USDC")
+            - amount: The amount to withdraw (e.g., "all", "1.5")
+            - destination_address: A valid Ethereum address (42 characters, starting with 0x followed by 40 hex characters)
+              Example: "0xf39Fd6e51aad88F6F4ce6aB8827279cffFb92266"
+            - chain_id: The blockchain ID (e.g., "1" for Ethereum, "84532" for Base)
             
-            # Create a system prompt
-            system_prompt = """
-            You are a cryptocurrency security agent tasked with protecting user funds. Analyze the security alert and 
-            determine the appropriate protective action to take. Your response should include a JSON object with an 
-            "action_plan" field.
+        2. revoke - Revoke token approvals for a compromised or suspicious protocol
+           Required parameters:
+            - token: The token symbol (e.g., "USDC")
+            - token_address: The token contract address (alternative to token)
+            - spender_address: The address to revoke approval from (must be a valid Ethereum address)
+              Example: "0xAdb1678064eB383B18795c701f1473f7d1795183"
+            - chain_id: The blockchain ID
             
-            Available actions:
-            1. withdraw - Withdraw funds from a compromised protocol or token
-               Required parameters: 
-                - token: The token symbol to withdraw (e.g., "ETH", "USDC")
-                - amount: The amount to withdraw (e.g., "all", "1.5")
-                - destination_address: A valid Ethereum address (42 characters, starting with 0x followed by 40 hex characters)
-                  Example: "0xf39Fd6e51aad88F6F4ce6aB8827279cffFb92266"
-                - chain_id: The blockchain ID (e.g., "1" for Ethereum, "84532" for Base)
-                
-            2. revoke - Revoke token approvals for a compromised or suspicious protocol
-               Required parameters:
-                - token: The token symbol (e.g., "USDC")
-                - token_address: The token contract address (alternative to token)
-                - spender_address: The address to revoke approval from (must be a valid Ethereum address)
-                  Example: "0xAdb1678064eB383B18795c701f1473f7d1795183"
-                - chain_id: The blockchain ID
-                
-            3. monitor - Set up enhanced monitoring for a specific asset
-               Required parameters:
-                - asset: The asset to monitor (e.g., "ETH", "All Positions")
-                - duration: Monitoring duration (e.g., "24h", "3d")
-                - threshold: Alert threshold (e.g., "5%")
-                
-            4. swap - Swap a vulnerable token for a safer asset
-               Required parameters:
-                - token_in: The input token symbol (e.g., "ETH")
-                - token_out: The output token symbol (e.g., "USDC")
-                - amount_in: The amount to swap (e.g., "all", "1.5")
-                - chain_id: The blockchain ID
+        3. monitor - Set up enhanced monitoring for a specific asset
+           Required parameters:
+            - asset: The asset to monitor (e.g., "ETH", "All Positions")
+            - duration: Monitoring duration (e.g., "24h", "3d")
+            - threshold: Alert threshold (e.g., "5%")
             
-            IMPORTANT: For any address field (destination_address, spender_address, etc.), you MUST provide a 
-            properly formatted Ethereum address starting with "0x" followed by exactly 40 hexadecimal characters.
-            DO NOT use placeholders like "0xYourAddress" or "ADDRESS_HERE".
-            If unsure about the exact address, use this example safe address: 0xf39Fd6e51aad88F6F4ce6aB8827279cffFb92266
-            
-            Return your response in this exact format:
-            {
-                "action_plan": {
-                    "action_type": "withdraw", // or "revoke", "monitor", "swap"
-                    "parameters": {
-                        // Include ALL required parameters for the selected action
-                    }
+        4. swap - Swap a vulnerable token for a safer asset
+           Required parameters:
+            - token_in: The input token symbol (e.g., "ETH")
+            - token_out: The output token symbol (e.g., "USDC")
+            - amount_in: The amount to swap (e.g., "all", "1.5")
+            - chain_id: The blockchain ID
+        
+        IMPORTANT: For any address field (destination_address, spender_address, etc.), you MUST provide a 
+        properly formatted Ethereum address starting with "0x" followed by exactly 40 hexadecimal characters.
+        DO NOT use placeholders like "0xYourAddress" or "ADDRESS_HERE".
+        If unsure about the exact address, use this example safe address: 0xf39Fd6e51aad88F6F4ce6aB8827279cffFb92266
+        
+        Return your response in this exact format:
+        {
+            "action_plan": {
+                "action_type": "withdraw", // or "revoke", "monitor", "swap"
+                "parameters": {
+                    // Include ALL required parameters for the selected action
                 }
             }
-            """
-            
-            # Create a user prompt
-            user_prompt = f"""
-            Security Alert: {alert_text}
-            
-            Context Information:
-            {context}
-            
-            Based on this alert, what protective action should be taken? Return a JSON object with 
-            an "action_plan" field that specifies the action type and ALL required parameters listed in my instructions.
-            """
-            
-            try:
-                logger.info("\033[1;32m[ANALYSIS]\033[0m Sending alert to OpenAI for analysis...")
-                completion = self.openai_client.chat.completions.create(
-                    messages=[
-                        {"role": "system", "content": system_prompt},
-                        {"role": "user", "content": user_prompt}
-                    ],
-                    model="gpt-3.5-turbo",
-                )
-                response = completion.choices[0].message.content
-                logger.info("\033[1;32m[ANALYSIS]\033[0m Received response from OpenAI")
-            except Exception as e:
-                logger.error(f"\033[1;31m[ERROR]\033[0m Failed to get OpenAI response: {str(e)}")
-                logger.warning("\033[1;33m[FALLBACK]\033[0m Using mock response instead")
-                response = self.get_mock_response(alert_text)
+        }
+        """
+        
+        # Create a user prompt
+        user_prompt = f"""
+        Security Alert: {alert_text}
+        
+        Context Information:
+        {context}
+        
+        Based on this alert, what protective action should be taken? Return a JSON object with 
+        an "action_plan" field that specifies the action type and ALL required parameters listed in my instructions.
+        """
+        
+        try:
+            logger.info("\033[1;32m[ANALYSIS]\033[0m Sending alert to OpenAI for analysis...")
+            completion = self.openai_client.chat.completions.create(
+                messages=[
+                    {"role": "system", "content": system_prompt},
+                    {"role": "user", "content": user_prompt}
+                ],
+                model="gpt-3.5-turbo",
+            )
+            response = completion.choices[0].message.content
+            logger.info("\033[1;32m[ANALYSIS]\033[0m Received response from OpenAI")
+        except Exception as e:
+            logger.error(f"\033[1;31m[ERROR]\033[0m Failed to get OpenAI response: {str(e)}")
+            # No fallback to mock response
+            response = "Error processing security alert. Please check your OpenAI API key and try again."
         
         logger.info("\033[1;32m[RESPONSE]\033[0m AI response received:")
         # Print a truncated version of the response for demo purposes
@@ -822,10 +715,6 @@ class SecurityAgent:
     def _parse_ai_response(self, response_text: str) -> Tuple[str, Dict[str, Any]]:
         """Alias for parse_ai_response for backward compatibility."""
         return self.parse_ai_response(response_text)
-    
-    def _get_mock_response(self, alert_text: str) -> str:
-        """Alias for get_mock_response for backward compatibility."""
-        return self.get_mock_response(alert_text)
     
     def _try_parse_json_response(self, response_text: str) -> Optional[Tuple[str, Dict[str, Any]]]:
         """Alias for try_parse_json_response for backward compatibility."""
