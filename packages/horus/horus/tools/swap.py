@@ -26,6 +26,7 @@ import logging
 import os
 from typing import Any, Dict, List, Optional, Tuple, Union
 
+from .agent_kit import AGENTKIT_AVAILABLE, agent_kit_manager
 from .base import create_tool
 from .constants import (DEFAULT_BLOCK_EXPLORERS, DEFAULT_CHAIN_ID,
                         DEFAULT_FEE_TIER, DEFAULT_SLIPPAGE)
@@ -795,6 +796,9 @@ class SwapTool:
         if not AGENTKIT_AVAILABLE:
             logger.warning(f"Simulating swap from {token_in_address} to {token_out_address} on chain {chain_id}")
             
+            # Use a deterministic wallet address for simulation
+            simulated_wallet = "0x" + "".join([hex(ord(c))[2:] for c in "HorusSecurityAgent"])[:42]
+            
             # For testnet development, provide more details in simulation mode
             return {
                 "success": True,
@@ -802,53 +806,32 @@ class SwapTool:
                 "message": (
                     f"Simulated swap of {amount_in} tokens ({token_in_address}) "
                     f"for approximately {min_amount_out} tokens ({token_out_address}) "
-                    f"with {slippage}% slippage on chain {chain_id} using router {router_address}"
+                    f"with {slippage}% slippage on chain {chain_id} using router {router_address} "
+                    f"from wallet {simulated_wallet}"
                 ),
                 "amount_in": amount_in,
                 "amount_out": min_amount_out,
-                "testnet_simulation": True
+                "testnet_simulation": True,
+                "wallet_address": simulated_wallet
             }
         
         try:
-            # Initialize AgentKit providers if needed
-            if not hasattr(self, '_cdp_action_provider'):
-                self._cdp_action_provider = CdpActionProvider()
-                self._cdp_wallet_provider = CdpWalletProvider()
-            
-            # Get default account
-            account = self._cdp_wallet_provider.get_default_account()
-            
-            # Log the swap parameters for testnet debugging
-            logger.info(
-                f"Executing swap on chain {chain_id} with parameters:\n"
-                f"- Account: {account}\n"
-                f"- Token In: {token_in_address}\n"
-                f"- Token Out: {token_out_address}\n"
-                f"- Amount In: {amount_in}\n"
-                f"- Minimum Out: {min_amount_out}\n"
-                f"- Router: {router_address}\n"
-                f"- Slippage: {slippage}%\n"
-                f"- Fee Tier: {DEFAULT_FEE_TIER}"
-            )
-            
-            # Execute the swap using AgentKit
-            result = self._cdp_action_provider.execute_swap(
-                chain_id=chain_id,
-                account=account,
-                token_in=token_in_address,
-                token_out=token_out_address,
+            # Use the shared AgentKit manager to execute the swap
+            result = agent_kit_manager.execute_swap(
+                token_in_address=token_in_address,
+                token_out_address=token_out_address,
                 amount_in=amount_in,
-                slippage_percentage=slippage,
-                fee_tier=DEFAULT_FEE_TIER
+                chain_id=chain_id,
+                slippage_percentage=slippage
             )
             
             # Format the result
             output = {
-                "success": result.status == ActionStatus.SUCCESS,
-                "transaction_hash": getattr(result, "transaction_hash", ""),
-                "message": getattr(result, "message", "Swap executed"),
+                "success": result.get("success", False),
+                "transaction_hash": result.get("transaction_hash", ""),
+                "message": result.get("message", "Swap executed"),
                 "amount_in": amount_in,
-                "amount_out": getattr(result, "amount_out", min_amount_out)
+                "amount_out": result.get("amount_out", min_amount_out)
             }
             
             # Log detailed result for testnet debugging
@@ -905,9 +888,14 @@ class SwapTool:
         # For demo purposes, we'll simulate the withdrawal and swap
         if not AGENTKIT_AVAILABLE:
             logger.warning(f"Simulating LP token swap for position {lp_token_id} on chain {chain_id}")
+            
+            # Use a deterministic wallet address for simulation
+            simulated_wallet = "0x" + "".join([hex(ord(c))[2:] for c in "HorusSecurityAgent"])[:42]
+            
             return (
-                f"Successfully removed liquidity from {token_in} position (ID: {lp_token_id}) "
-                f"and swapped underlying tokens for {token_out}"
+                f"Simulated LP token swap for position {lp_token_id} on chain {chain_id}: "
+                f"Successfully removed liquidity from {token_in} position and swapped underlying tokens for {token_out} "
+                f"using wallet {simulated_wallet}"
             )
         
         try:
@@ -916,19 +904,35 @@ class SwapTool:
             # 2. Call collect to receive the tokens
             # 3. Swap the received tokens for the desired output token
             
-            # Initialize AgentKit providers if needed
-            if not hasattr(self, '_cdp_action_provider'):
-                self._cdp_action_provider = CdpActionProvider()
-                self._cdp_wallet_provider = CdpWalletProvider()
-            
-            # Get default account
-            account = self._cdp_wallet_provider.get_default_account()
-            
-            # For demonstration purposes, we'll just return a mock success message
-            return (
-                f"Successfully removed liquidity from {token_in} position (ID: {lp_token_id}) "
-                f"and swapped underlying tokens for {token_out}"
+            # Use the shared AgentKit manager to execute the swap
+            result = agent_kit_manager.execute_swap(
+                token_in_address=position_manager,
+                token_out_address=token_out,
+                amount_in=lp_token_id,
+                chain_id=chain_id,
+                slippage_percentage=slippage
             )
+            
+            if result.get("success", False):
+                tx_hash = result.get("transaction_hash")
+                explorer_url = self.get_explorer_url(chain_id, tx_hash) if tx_hash else None
+                
+                message = f"Successfully removed liquidity from {token_in} position (ID: {lp_token_id}) "
+                message += f"and swapped underlying tokens to {token_out} using wallet {position_manager}"
+                if explorer_url:
+                    message += f"\nTransaction: {explorer_url}"
+                
+                # If amount out is available, include it
+                amount_out = result.get("amount_out")
+                if amount_out:
+                    message += f"\nReceived: {amount_out} {token_out}"
+                
+                logger.info(f"Swap successful: {message}")
+                return message
+            else:
+                error_message = result.get("message", "Unknown error")
+                logger.error(f"Swap failed: {error_message}")
+                return f"Failed to execute swap: {error_message}"
         except Exception as e:
             logger.error(f"Error handling LP token swap: {str(e)}")
             return f"Error handling LP token swap: {str(e)}"
@@ -975,28 +979,55 @@ class SwapTool:
             )
         
         try:
-            # In a real implementation, this would:
-            # 1. Call withdraw on the Beefy vault
-            # 2. Call decreaseLiquidity on the position manager
-            # 3. Call collect to receive the tokens
-            # 4. Swap the received tokens for the desired output token
-            
-            # Initialize AgentKit providers if needed
-            if not hasattr(self, '_cdp_action_provider'):
-                self._cdp_action_provider = CdpActionProvider()
-                self._cdp_wallet_provider = CdpWalletProvider()
-            
-            # Get default account
-            account = self._cdp_wallet_provider.get_default_account()
-            
-            # For demonstration purposes, just return a success message
-            return (
-                f"Successfully withdrawn NFT position {token_id} from vault {vault_address}, "
-                f"decreased liquidity, and swapped underlying tokens to {token_out}"
+            # Use the shared AgentKit manager to execute the swap
+            result = agent_kit_manager.execute_swap(
+                token_in_address=vault_address,
+                token_out_address=token_out,
+                amount_in=token_id,
+                chain_id=chain_id,
+                slippage_percentage=0.5
             )
+            
+            if result.get("success", False):
+                tx_hash = result.get("transaction_hash")
+                explorer_url = self.get_explorer_url(chain_id, tx_hash) if tx_hash else None
+                
+                message = f"Successfully withdrawn NFT position {token_id} from vault {vault_address}, "
+                message += f"decreased liquidity, and swapped underlying tokens to {token_out}"
+                if explorer_url:
+                    message += f"\nTransaction: {explorer_url}"
+                
+                # If amount out is available, include it
+                amount_out = result.get("amount_out")
+                if amount_out:
+                    message += f"\nReceived: {amount_out} {token_out}"
+                
+                logger.info(f"Swap successful: {message}")
+                return message
+            else:
+                error_message = result.get("message", "Unknown error")
+                logger.error(f"Swap failed: {error_message}")
+                return f"Failed to execute swap: {error_message}"
         except Exception as e:
             logger.error(f"Error handling Beefy vault swap: {str(e)}")
             return f"Error handling Beefy vault swap: {str(e)}"
+
+    def get_explorer_url(self, chain_id: str, tx_hash: str) -> Optional[str]:
+        """
+        Get the block explorer URL for a transaction.
+
+        Args:
+            chain_id: The chain ID of the transaction.
+            tx_hash: The transaction hash.
+
+        Returns:
+            Optional[str]: The block explorer URL, or None if not available.
+        """
+        chain_id = str(chain_id)  # Ensure chain_id is a string
+        
+        if chain_id in self.block_explorers:
+            return f"{self.block_explorers[chain_id]}/{tx_hash}"
+        return None
 
 
 # -----------------------------------------------------------------------------

@@ -7,42 +7,10 @@ It supports multiple EVM networks and provides detailed transaction information.
 """
 import logging
 import os
+import re
 from typing import Any, Dict, Optional, Tuple, TypedDict, Union
 
-# Try to import Coinbase AgentKit, but provide mock implementations if not available
-try:
-    from coinbase_agentkit.action_providers.cdp.cdp_action_provider import CdpActionProvider
-    from coinbase_agentkit.action_providers.cdp.cdp_wallet_provider import CdpWalletProvider
-    from coinbase_agentkit.types import ActionResult, ActionStatus
-    COINBASE_AGENTKIT_AVAILABLE = True
-except ImportError:
-    logger = logging.getLogger(__name__)
-    logger.warning("Coinbase AgentKit not available. Using mock implementations.")
-    COINBASE_AGENTKIT_AVAILABLE = False
-    
-    # Define mock classes
-    class CdpWalletProvider:
-        def __init__(self, *args, **kwargs):
-            pass
-    
-    class CdpActionProvider:
-        def __init__(self, *args, **kwargs):
-            pass
-        
-        def execute_action(self, *args, **kwargs):
-            return {
-                "status": "COMPLETED",
-                "message": "Mock implementation: Coinbase AgentKit not available",
-                "transaction_hash": "0x0000000000000000000000000000000000000000000000000000000000000000"
-            }
-    
-    class ActionResult:
-        pass
-    
-    class ActionStatus:
-        COMPLETED = "COMPLETED"
-        ERROR = "ERROR"
-
+from .agent_kit import AGENTKIT_AVAILABLE, agent_kit_manager
 from .base import BaseTool
 from .constants import DEFAULT_BLOCK_EXPLORERS, DEFAULT_CHAIN_ID
 
@@ -104,8 +72,6 @@ class RevokeTool(BaseTool):
         ```
     """
     
-    # Class constants - use imported constants
-    
     def __init__(self, tokens_config: Dict[str, Any], protocols_config: Optional[Dict[str, Any]] = None):
         """
         Initialize the RevokeTool with token and protocol configuration.
@@ -143,8 +109,6 @@ class RevokeTool(BaseTool):
         super().__init__("revoke")
         self.tokens_config = tokens_config
         self.protocols_config = protocols_config or {"protocols": []}
-        self.wallet_provider: Optional[CdpWalletProvider] = None
-        self.action_provider: Optional[CdpActionProvider] = None
         
         # Build block explorer mapping from protocols config
         self.block_explorers = self._build_block_explorer_mapping()
@@ -222,9 +186,16 @@ class RevokeTool(BaseTool):
         for token in self.tokens_config.get("tokens", []):
             if token.get("symbol") == token_symbol:
                 networks = token.get("networks", {})
-                address = networks.get(chain_id, "unknown")
-                logger.debug("Found token address %s for %s on chain %s", address, token_symbol, chain_id)
-                return address
+                chains = token.get("chains", {})  # Also check 'chains' key for compatibility
+                
+                # Try to get address from networks first, then chains
+                address = networks.get(chain_id)
+                if not address:
+                    address = chains.get(chain_id)
+                
+                if address:
+                    logger.debug("Found token address %s for %s on chain %s", address, token_symbol, chain_id)
+                    return address
         
         logger.warning("Token address not found for %s on chain %s", token_symbol, chain_id)
         return "unknown"
@@ -256,61 +227,7 @@ class RevokeTool(BaseTool):
         
         logger.warning("Protocol %s not found in configuration", protocol_name)
         return None
-    
-    def initialize_providers(self) -> Tuple[CdpWalletProvider, CdpActionProvider]:
-        """
-        Initialize the AgentKit wallet and action providers.
-        
-        Providers are initialized lazily when needed to avoid unnecessary API calls.
-        API keys are retrieved from environment variables.
-        
-        Returns:
-            A tuple of (wallet_provider, action_provider)
-            
-        Raises:
-            ValueError: If required environment variables are not set.
-            ConnectionError: If there's an issue connecting to the CDP API.
-        """
-        # If providers are already initialized, return them
-        if self.wallet_provider and self.action_provider:
-            return self.wallet_provider, self.action_provider
-        
-        # If Coinbase AgentKit is not available, return mock providers
-        if not COINBASE_AGENTKIT_AVAILABLE:
-            logger.warning("Using mock providers because Coinbase AgentKit is not available")
-            self.wallet_provider = CdpWalletProvider()
-            self.action_provider = CdpActionProvider()
-            return self.wallet_provider, self.action_provider
-        
-        # Get API key details from environment variables
-        api_key_name = os.getenv("CDP_API_KEY_NAME")
-        api_key_private_key = os.getenv("CDP_API_KEY_PRIVATE_KEY")
-        
-        if not api_key_name or not api_key_private_key:
-            raise ValueError(
-                "CDP_API_KEY_NAME and CDP_API_KEY_PRIVATE_KEY environment variables must be set"
-            )
-        
-        try:
-            # Initialize the wallet provider
-            self.wallet_provider = CdpWalletProvider(
-                api_key_name=api_key_name,
-                api_key_private_key=api_key_private_key,
-            )
-            
-            # Initialize the action provider
-            self.action_provider = CdpActionProvider(
-                wallet_provider=self.wallet_provider,
-            )
-            
-            logger.debug("CDP wallet and action providers initialized successfully")
-            
-            return self.wallet_provider, self.action_provider
-            
-        except Exception as e:
-            logger.error(f"Failed to initialize CDP providers: {str(e)}")
-            raise ConnectionError(f"Failed to connect to CDP API: {str(e)}")
-    
+
     def get_explorer_url(self, chain_id: str, tx_hash: str) -> Optional[str]:
         """
         Get the block explorer URL for a transaction.
@@ -328,27 +245,6 @@ class RevokeTool(BaseTool):
         
         logger.warning("No block explorer found for chain ID %s", chain_id)
         return None
-    
-    def create_revoke_action(self, token_address: str, spender_address: str, chain_id: str) -> Dict[str, Any]:
-        """
-        Create a revoke action configuration for AgentKit.
-        
-        Args:
-            token_address: The contract address of the token.
-            spender_address: The address that has been approved to spend the token.
-            chain_id: The chain ID as a string.
-            
-        Returns:
-            A dictionary containing the revoke action configuration.
-        """
-        return {
-            "type": "revokeAllowance",
-            "params": {
-                "tokenAddress": token_address,
-                "spenderAddress": spender_address,
-                "chainId": chain_id,
-            }
-        }
     
     def execute(self, parameters: RevokeParameters) -> str:
         """
@@ -369,102 +265,88 @@ class RevokeTool(BaseTool):
             ValueError: If required parameters are missing.
             ConnectionError: If there's an issue connecting to the CDP API.
         """
-        # If Coinbase AgentKit is not available, return a mock response
-        if not COINBASE_AGENTKIT_AVAILABLE:
-            token = parameters.get("token", "UNKNOWN")
-            protocol = parameters.get("protocol", "UNKNOWN")
-            chain_id = parameters.get("chain_id", DEFAULT_CHAIN_ID)
-            
-            logger.warning(f"Mock revocation executed for {token} on {protocol} (chain_id: {chain_id})")
-            
-            return (
-                f"MOCK RESPONSE: Successfully revoked approval for {token} to {protocol} "
-                f"on chain with ID {chain_id}. This is a mock response because Coinbase "
-                f"AgentKit is not available. No actual blockchain transaction was executed."
-            )
-        
-        # Log the parameters for debugging
-        logger.info(f"Executing revoke tool with parameters: {parameters}")
-        
-        # Get token address from token symbol if not provided directly
-        token_address = parameters.get("token_address")
-        token_symbol = parameters.get("token")
-        
-        if not token_address and token_symbol:
-            chain_id = str(parameters.get("chain_id", DEFAULT_CHAIN_ID))
-            token_address = self.get_token_address(token_symbol, chain_id)
-            
-            # If token address is still not found, return an error
-            if not token_address or token_address == "unknown":
-                return f"ERROR: Token '{token_symbol}' not found for chain ID '{chain_id}'"
-        
-        # Get the spender address
+        # Extract parameters
+        token_address = parameters.get("token_address", "unknown")
         spender_address = parameters.get("spender_address")
+        protocol = parameters.get("protocol", "unknown")
+        chain_id = str(parameters.get("chain_id", self.get_default_chain_id()))
         
-        # Validate token address
-        if not token_address:
-            return "ERROR: Missing token address. Please provide either token_address or token in the parameters."
+        # If we only have the token symbol, try to look up the address
+        if token_address == "unknown" and "token" in parameters:
+            token_symbol = parameters.get("token", "")
+            token_address = self.get_token_address(token_symbol, chain_id)
+            logger.info("Resolved token symbol %s to address %s on chain %s", 
+                       token_symbol, token_address, chain_id)
         
-        # Validate spender address
+        # Validate parameters
+        if token_address == "unknown":
+            logger.error("Token address is required for revocation")
+            return "Error: Token address is required for revocation. Please provide either a token_address or a valid token symbol."
+        
         if not spender_address:
-            return "ERROR: Missing spender address. Please provide spender_address in the parameters."
+            logger.error("Spender address is required for revocation")
+            return "Error: Spender address is required for revocation. Please provide the spender_address parameter."
         
-        # Validate that addresses are in the correct format
+        # Validate that addresses are in correct format (0x followed by 40 hex characters)
         if not self._is_valid_eth_address(token_address):
-            return f"ERROR: Invalid token address format: {token_address}"
-        
+            logger.error("Invalid token address format: %s", token_address)
+            return f"Error: Invalid token address format: {token_address}. Address should be in the format 0x followed by 40 hex characters."
+            
         if not self._is_valid_eth_address(spender_address):
-            return f"ERROR: Invalid spender address format: {spender_address}"
+            logger.error("Invalid spender address format: %s", spender_address)
+            return f"Error: Invalid spender address format: {spender_address}. Address should be in the format 0x followed by 40 hex characters."
         
-        # Get chain ID (default to Base Sepolia)
-        chain_id = str(parameters.get("chain_id", DEFAULT_CHAIN_ID))
+        # Validate chain_id is numeric
+        try:
+            int(chain_id)
+        except ValueError:
+            logger.error("Invalid chain ID: %s", chain_id)
+            return f"Error: Invalid chain ID: {chain_id}. Chain ID should be a numeric value."
+            
+        # Validate protocol
+        if protocol != "unknown":
+            protocol_info = self.get_protocol_info(protocol, chain_id)
+            if protocol_info is None:
+                logger.error("Unknown protocol %s", protocol)
+                return f"Error: Unknown protocol {protocol}. Please provide a valid protocol name."
         
-        # Get protocol name (for logging)
-        protocol = parameters.get("protocol", "Unknown Protocol")
+        logger.info("Executing revocation for token %s from spender %s on chain %s", 
+                   token_address, spender_address, chain_id)
         
         try:
-            # Initialize providers
-            wallet_provider, action_provider = self.initialize_providers()
+            # Execute the revocation using the shared AgentKit manager
+            result = agent_kit_manager.execute_revoke(token_address, spender_address, chain_id)
             
-            # Create the revoke action
-            action = self.create_revoke_action(token_address, spender_address, chain_id)
-            
-            # Execute the action
-            logger.info(f"Executing revocation for token {token_address} to spender {spender_address}")
-            result = action_provider.execute_action(action)
-            
-            # Process the result
-            status = result.get("status")
-            message = result.get("message", "")
-            tx_hash = result.get("transaction_hash", "")
-            
-            if status == ActionStatus.COMPLETED:
-                # Build a response with block explorer link if available
+            # Check the result
+            if result.get("success", False):
+                tx_hash = result.get("transaction_hash", "unknown")
                 explorer_url = self.get_explorer_url(chain_id, tx_hash)
                 
-                explorer_message = ""
+                logger.info("Successfully revoked approval. Transaction hash: %s", tx_hash)
+                
+                message = f"Successfully revoked approval for {token_address} from {spender_address} on chain {chain_id}."
+                if protocol != "unknown":
+                    message += f" This prevents the {protocol} protocol from accessing your tokens."
+                
                 if explorer_url:
-                    explorer_message = f"View the transaction on block explorer: {explorer_url}"
+                    message += f"\nTransaction: {explorer_url}"
                 
-                token_display = token_symbol if token_symbol else token_address
-                
-                return (
-                    f"Successfully revoked approval for {token_display} to {protocol} "
-                    f"on chain with ID {chain_id}.\n"
-                    f"Transaction hash: {tx_hash}\n"
-                    f"{explorer_message}"
-                )
+                return message
             else:
-                return f"ERROR: Revocation failed: {message}"
-                
+                error = result.get("message", "Unknown error")
+                logger.error("Failed to revoke approval: %s", error)
+                return f"Failed to revoke approval: {error}"
+            
         except ValueError as e:
-            return f"ERROR: {str(e)}"
+            logger.error("Value error during revocation: %s", str(e))
+            return f"Error: {str(e)}"
         except ConnectionError as e:
-            return f"ERROR: Connection failed: {str(e)}"
+            logger.error("Connection error during revocation: %s", str(e))
+            return f"Error connecting to CDP API: {str(e)}"
         except Exception as e:
-            logger.error(f"Unexpected error in revoke tool: {str(e)}")
-            return f"ERROR: Unexpected error: {str(e)}"
-    
+            logger.error("Unexpected error executing revocation: %s", str(e))
+            return f"Error executing revocation: {str(e)}"
+
     def _is_valid_eth_address(self, address: str) -> bool:
         """
         Validate that a string is in the format of an Ethereum address.
@@ -475,8 +357,6 @@ class RevokeTool(BaseTool):
         Returns:
             True if the address is valid, False otherwise.
         """
-        import re
-
         # Check if address is a string and matches the format 0x followed by 40 hex characters
         if not isinstance(address, str):
             return False
