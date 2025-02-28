@@ -1,0 +1,37 @@
+[
+  {
+    "id": "tweet1",
+    "content": "ALERT: Critical vulnerability found in Uniswap V3 contract. All funds at risk of being drained.",
+    "timestamp": 1677513600000
+  },
+  {
+    "id": "tweet2",
+    "content": "New DEX launch! Check out our amazing APY rates.",
+    "timestamp": 1677513660000
+  },
+  {
+    "id": "tweet3",
+    "content": "ALERT: Potential exploit detected in Aave lending protocol. Users advised to withdraw funds immediately.",
+    "timestamp": 1677513720000
+  },
+  {
+    "id": "tweet4",
+    "content": "Just minted my first NFT! So excited to be part of this community.",
+    "timestamp": 1677513780000
+  },
+  {
+    "id": "tweet5",
+    "content": "ETH merged successfully to PoS. What's your favorite L2 scaling solution?",
+    "timestamp": 1677513840000
+  },
+  {
+    "id": "tweet6",
+    "content": "ALERT: Phishing campaign targeting MetaMask users through fake airdrops. Do not connect your wallet!",
+    "timestamp": 1677513900000
+  },
+  {
+    "id": "tweet7",
+    "content": "Anyone heading to ETHDenver next month? Looking for hackathon teammates.",
+    "timestamp": 1677513960000
+  }
+]

@@ -1,19 +1,12 @@
 /**
  * Horus Demo
- * 
+ *
  * A TypeScript package for demonstrating Horus functionality.
  */
 
 import { showBanner, showShutdownBanner } from './ui';
+import { TwitterPoller } from './utils/polling';
 
-/**
- * Example function that returns a greeting message
- * @param name The name to greet
- * @returns A greeting message
- */
-export function greet(name: string = 'world'): string {
-  return `Hello, ${name}!`;
-}
 
 /**
  * Main function to demonstrate the package functionality
@@ -21,9 +14,13 @@ export function greet(name: string = 'world'): string {
 export function main(): void {
   // Display the ASCII art banner
   showBanner('Twitter Security Monitoring Demo');
-  
-  console.log(greet('Horus'));
-  
+
+  const twitterPoller = new TwitterPoller((sig) => {
+    console.log(`Received signal: ${JSON.stringify(sig)}`);
+  });
+
+  twitterPoller.start();
+
   // Setup graceful shutdown
   process.on('SIGINT', () => {
     showShutdownBanner();

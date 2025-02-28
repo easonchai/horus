@@ -26,6 +26,7 @@
   },
   "dependencies": {
     "chalk": "^4.1.2",
-    "figlet": "^1.7.0"
+    "figlet": "^1.7.0",
+    "xstate": "^5.19.2"
   }
 }
