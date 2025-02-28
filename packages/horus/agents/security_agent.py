@@ -58,7 +58,8 @@ class SecurityAgent:
         
         # Initialize tools
         self.withdrawal_tool = WithdrawalTool(self.tokens_config, self.protocols_config)
-        self.revoke_tool = RevokeTool(self.tokens_config, self.protocols_config)
+        revoke_tool_instance = RevokeTool(self.tokens_config, self.protocols_config)
+        self.revoke_tool = revoke_tool_instance.tool
         self.swap_tool = SwapTool(self.tokens_config, self.protocols_config, self.dependency_graph)
         self.monitor_tool = create_monitor_tool()
     
@@ -361,6 +362,95 @@ class SecurityAgent:
             # Not valid JSON
             return None
             
+    def _parse_text_response(self, response_text: str) -> Tuple[str, Dict[str, Any]]:
+        """
+        Parse the response as plain text, looking for keywords and extracting parameters.
+        
+        Args:
+            response_text: The response from the AI.
+            
+        Returns:
+            A tuple containing the action type and parameters.
+        """
+        response_lower = response_text.lower()
+        
+        # Check for withdrawal action
+        if "withdraw" in response_lower or "exit" in response_lower:
+            token = self._extract_parameter(response_text, "token", "unknown")
+            amount = self._extract_parameter(response_text, "amount", "all")
+            chain_id = self._extract_parameter(response_text, "chain_id", "1")
+            
+            return "withdrawal", {
+                "token": token,
+                "amount": amount,
+                "chain_id": chain_id
+            }
+        
+        # Check for swap action
+        elif "swap" in response_lower or "convert" in response_lower or "exchange" in response_lower:
+            token_in = self._extract_parameter(response_text, "token_in", "unknown")
+            token_out = self._extract_parameter(response_text, "token_out", "USDC")
+            amount_in = self._extract_parameter(response_text, "amount_in", "all")
+            chain_id = self._extract_parameter(response_text, "chain_id", "1")
+            
+            return "swap", {
+                "token_in": token_in,
+                "token_out": token_out,
+                "amount_in": amount_in,
+                "chain_id": chain_id
+            }
+        
+        # Check for revoke action
+        elif "revoke" in response_lower or "permissions" in response_lower or "approval" in response_lower:
+            token = self._extract_parameter(response_text, "token", "unknown")
+            token_address = self._extract_parameter(response_text, "token_address", "unknown")
+            protocol = self._extract_parameter(response_text, "protocol", "unknown")
+            chain_id = self._extract_parameter(response_text, "chain_id", "1")
+            spender_address = self._extract_parameter(response_text, "spender_address", "")
+            
+            return "revoke", {
+                "token": token,
+                "token_address": token_address,
+                "protocol": protocol,
+                "chain_id": chain_id,
+                "spender_address": spender_address
+            }
+        
+        # Default to monitor action
+        else:
+            return self._get_default_monitor_action()
+    
+    def parse_ai_response(self, response_text: str) -> Tuple[str, Dict[str, Any]]:
+        """
+        Parse the AI response to determine the action to take.
+        
+        This method attempts to parse the response in two ways:
+        1. First as a structured JSON with an action_plan field
+        2. If that fails, falls back to text-based keyword parsing
+        
+        Args:
+            response_text: The response from the AI.
+            
+        Returns:
+            A tuple containing the action type and parameters.
+        """
+        logger.info("Parsing AI response")
+        
+        try:
+            # First try to parse as JSON
+            json_result = self.try_parse_json_response(response_text)
+            if json_result:
+                return json_result
+            
+            # If JSON parsing fails or doesn't match expected format, 
+            # fall back to text parsing
+            return self._parse_text_response(response_text)
+                
+        except Exception as e:
+            logger.error(f"Error parsing AI response: {e}")
+            # Default to monitoring in case of error
+            return self._get_default_monitor_action()
+    
     def _process_action_and_parameters(self, action_type: str, parameters: Dict[str, Any]) -> Tuple[str, Dict[str, Any]]:
         """
         Process action type and parameters to ensure they are properly formatted.
@@ -479,95 +569,6 @@ class SecurityAgent:
                 parameters["threshold"] = "5%"
                 
         return action_type, parameters
-    
-    def _parse_text_response(self, response_text: str) -> Tuple[str, Dict[str, Any]]:
-        """
-        Parse the response as plain text, looking for keywords and extracting parameters.
-        
-        Args:
-            response_text: The response from the AI.
-            
-        Returns:
-            A tuple containing the action type and parameters.
-        """
-        response_lower = response_text.lower()
-        
-        # Check for withdrawal action
-        if "withdraw" in response_lower or "exit" in response_lower:
-            token = self._extract_parameter(response_text, "token", "unknown")
-            amount = self._extract_parameter(response_text, "amount", "all")
-            chain_id = self._extract_parameter(response_text, "chain_id", "1")
-            
-            return "withdrawal", {
-                "token": token,
-                "amount": amount,
-                "chain_id": chain_id
-            }
-        
-        # Check for swap action
-        elif "swap" in response_lower or "convert" in response_lower or "exchange" in response_lower:
-            token_in = self._extract_parameter(response_text, "token_in", "unknown")
-            token_out = self._extract_parameter(response_text, "token_out", "USDC")
-            amount_in = self._extract_parameter(response_text, "amount_in", "all")
-            chain_id = self._extract_parameter(response_text, "chain_id", "1")
-            
-            return "swap", {
-                "token_in": token_in,
-                "token_out": token_out,
-                "amount_in": amount_in,
-                "chain_id": chain_id
-            }
-        
-        # Check for revoke action
-        elif "revoke" in response_lower or "permissions" in response_lower or "approval" in response_lower:
-            token = self._extract_parameter(response_text, "token", "unknown")
-            token_address = self._extract_parameter(response_text, "token_address", "unknown")
-            protocol = self._extract_parameter(response_text, "protocol", "unknown")
-            chain_id = self._extract_parameter(response_text, "chain_id", "1")
-            spender_address = self._extract_parameter(response_text, "spender_address", "")
-            
-            return "revoke", {
-                "token": token,
-                "token_address": token_address,
-                "protocol": protocol,
-                "chain_id": chain_id,
-                "spender_address": spender_address
-            }
-        
-        # Default to monitor action
-        else:
-            return self._get_default_monitor_action()
-    
-    def parse_ai_response(self, response_text: str) -> Tuple[str, Dict[str, Any]]:
-        """
-        Parse the AI response to determine the action to take.
-        
-        This method attempts to parse the response in two ways:
-        1. First as a structured JSON with an action_plan field
-        2. If that fails, falls back to text-based keyword parsing
-        
-        Args:
-            response_text: The response from the AI.
-            
-        Returns:
-            A tuple containing the action type and parameters.
-        """
-        logger.info("Parsing AI response")
-        
-        try:
-            # First try to parse as JSON
-            json_result = self.try_parse_json_response(response_text)
-            if json_result:
-                return json_result
-            
-            # If JSON parsing fails or doesn't match expected format, 
-            # fall back to text parsing
-            return self._parse_text_response(response_text)
-                
-        except Exception as e:
-            logger.error(f"Error parsing AI response: {e}")
-            # Default to monitoring in case of error
-            return self._get_default_monitor_action()
     
     def process_alert(self, alert_text: str) -> str:
         """

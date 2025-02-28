@@ -23,7 +23,7 @@ def setup_agent():
 def main():
     """Main entry point for the Horus security monitoring agent."""
     try:
-        from cli.app import main as cli_main
+        from cli.cli_demo import main as cli_main
         cli_main()
     except ImportError as e:
         logger.error(f"Failed to import required modules: {str(e)}")

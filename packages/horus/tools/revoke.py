@@ -11,7 +11,7 @@ import re
 from typing import Any, Dict, Optional, Tuple, TypedDict, Union
 
 from core.agent_kit import AGENTKIT_AVAILABLE, agent_kit_manager
-from langchain.tools import BaseTool
+from langchain.tools import Tool
 
 from .constants import DEFAULT_BLOCK_EXPLORERS, DEFAULT_CHAIN_ID
 
@@ -29,7 +29,7 @@ class RevokeParameters(TypedDict, total=False):
     token: str
 
 
-class RevokeTool(BaseTool):
+class RevokeTool:
     """
     Tool for revoking token approvals using Coinbase AgentKit.
     
@@ -107,12 +107,18 @@ class RevokeTool(BaseTool):
                     ]
                 }
         """
-        super().__init__("revoke")
         self.tokens_config = tokens_config
         self.protocols_config = protocols_config or {"protocols": []}
         
         # Build block explorer mapping from protocols config
         self.block_explorers = self._build_block_explorer_mapping()
+        
+        # Create a Tool instance for LangChain compatibility
+        self.tool = Tool(
+            name="revoke",
+            description="Tool for revoking token approvals",
+            func=self._run
+        )
         
         # Log initialization info
         logger.debug("RevokeTool initialized with %d tokens", len(tokens_config.get("tokens", [])))
@@ -377,3 +383,32 @@ class RevokeTool(BaseTool):
             return True
         except ValueError:
             return False
+
+    def _run(self, token_address: str = None, spender_address: str = None, protocol: str = None, 
+             chain_id: str = None, token: str = None) -> str:
+        """
+        Run the RevokeTool with the provided parameters.
+        
+        Args:
+            token_address: The contract address to revoke permissions from.
+            spender_address: The address that has been approved to spend the token.
+            protocol: The protocol to revoke permissions from (optional).
+            chain_id: The chain ID (default: determined by get_default_chain_id).
+            token: The token symbol (optional, used if token_address not provided).
+            
+        Returns:
+            A string describing the action taken or an error message.
+        """
+        parameters = {}
+        if token_address:
+            parameters["token_address"] = token_address
+        if spender_address:
+            parameters["spender_address"] = spender_address
+        if protocol:
+            parameters["protocol"] = protocol
+        if chain_id:
+            parameters["chain_id"] = chain_id
+        if token:
+            parameters["token"] = token
+            
+        return self.execute(parameters)
