@@ -12,7 +12,7 @@ cd dapp || exit 1
 
 # Run forge script and capture output
 echo -e "${BLUE}Running forge script...${NC}"
-OUTPUT=$(forge script script/Deploy.s.sol:Deploy --rpc-url base_sepolia --broadcast)
+OUTPUT=$(forge script script/Deploy.s.sol:Deploy --rpc-url base_sepolia --verify --broadcast)
 
 # Extract addresses using grep and sed
 echo -e "${BLUE}Extracting addresses...${NC}"

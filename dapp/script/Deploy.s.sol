@@ -56,8 +56,8 @@ contract Deploy is Script {
             token0: token0,
             token1: token1,
             fee: 500, // Fee tier
-            tickLower: -50,
-            tickUpper: 50,
+            tickLower: -887270,
+            tickUpper: 887270,
             amount0Desired: 10000 * 10**6, // amount0Desired
             amount1Desired: 10000 * 10**6, // amount1Desired
             amount0Min: 0, // amount0Min
@@ -84,8 +84,8 @@ contract Deploy is Script {
             token0: token2,
             token1: token3,
             fee: 500, // Fee tier
-            tickLower: -50,
-            tickUpper: 50,
+            tickLower: -887270,
+            tickUpper: 887270,
             amount0Desired: 10000 * 10**6, // amount0Desired
             amount1Desired: 10000 * 10**6, // amount1Desired
             amount0Min: 0, // amount0Min
@@ -112,8 +112,8 @@ contract Deploy is Script {
             token0: token4,
             token1: token5,
             fee: 500, // Fee tier
-            tickLower: -50,
-            tickUpper: 50,
+            tickLower: -887270,
+            tickUpper: 887270,
             amount0Desired: 10000 * 10**6, // amount0Desired
             amount1Desired: 10000 * 10**6, // amount1Desired
             amount0Min: 0, // amount0Min
