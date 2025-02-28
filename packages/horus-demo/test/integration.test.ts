@@ -16,7 +16,7 @@ describe("Horus Integration", () => {
     vi.useRealTimers();
   });
 
-  it.skip("verifies basic signal handling and context updates", async () => {
+  it("verifies basic signal handling and context updates", async () => {
     console.log("Starting basic signal test");
     // Initialize our actor with initial context
     const horusActor = createActor(horusMachine, {
@@ -80,7 +80,7 @@ describe("Horus Integration", () => {
   });
 
   // Implement PATH 1 test for critical threat workflow
-  it.skip("PATH 1: should process critical threat through the entire workflow", async () => {
+  it("PATH 1: should process critical threat through the entire workflow", async () => {
     // Create detailed log messages for debugging
     const log = (message: string, data?: unknown) => {
       console.log(
@@ -164,23 +164,23 @@ describe("Horus Integration", () => {
     expect(stateHistory).toContain("composing");
     expect(stateHistory).toContain("executing");
 
-    // In this test environment, since no actions are composed,
-    // the state machine transitions to "failed" state
-    expect(stateHistory).toContain("failed");
+    // We expect to reach "completed" state then transition back to "idle"
+    expect(stateHistory).toContain("completed");
 
     // Verify the sequence of states is correct
     log("State history for sequence check:", stateHistory);
     let expectedSequenceFound = false;
 
-    // Find the pattern: idle -> evaluating -> processing -> composing -> executing -> failed
-    for (let i = 0; i < stateHistory.length - 5; i++) {
+    // Find the pattern: idle -> evaluating -> processing -> composing -> executing -> completed -> idle
+    for (let i = 0; i < stateHistory.length - 6; i++) {
       if (
         stateHistory[i] === "idle" &&
         stateHistory[i + 1] === "evaluating" &&
         stateHistory[i + 2] === "processing" &&
         stateHistory[i + 3] === "composing" &&
         stateHistory[i + 4] === "executing" &&
-        stateHistory[i + 5] === "failed"
+        stateHistory[i + 5] === "completed" &&
+        stateHistory[i + 6] === "idle"
       ) {
         expectedSequenceFound = true;
         break;
@@ -197,11 +197,17 @@ describe("Horus Integration", () => {
       expect(finalContext.detectedThreat.affectedTokens).toContain("USDC");
     }
 
-    // Since no actions were composed, check that actionPlan is empty
-    expect(finalContext.actionPlan).toHaveLength(0);
+    // We now expect to have at least one action in the action plan
+    expect(finalContext.actionPlan.length).toBeGreaterThan(0);
 
-    // Verify final state is failed
-    expect(finalState.value).toBe("failed");
+    // Verify we have execution results
+    expect(finalContext.executionResults.length).toBeGreaterThan(0);
+
+    // Verify final state is idle (after completing the workflow)
+    expect(finalState.value).toBe("idle");
+
+    // Log the complete state history
+    console.log("Complete state history:", stateHistory);
   });
 
   it("PATH 2: should evaluate non-threat signal and return to idle", async () => {
@@ -317,5 +323,8 @@ describe("Horus Integration", () => {
 
     // Verify currentSignal was cleared
     expect(finalContext.currentSignal).toBeUndefined();
+
+    // Log the complete state history
+    console.log("Complete state history:", stateHistory);
   });
 });
