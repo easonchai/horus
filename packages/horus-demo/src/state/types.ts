@@ -1,19 +1,20 @@
-import { Signal, Threat, Action } from '../models/types';
+import { Action, Signal, Threat } from "../models/types";
+import { ActionExecutionResult } from "../services/action-executor";
 
 export interface HorusContext {
   signals: Signal[];
   currentSignal?: Signal;
   detectedThreat?: Threat;
   actionPlan: Action[];
-  executionResults: { success: boolean; txHash: string; action: Action }[];
+  executionResults: ActionExecutionResult[];
   error?: Error;
 }
 
 export type HorusEvent =
-  | { type: 'SIGNAL_RECEIVED'; signal: Signal }
-  | { type: 'EVALUATE_SIGNALS' }
-  | { type: 'THREAT_DETECTED'; threat: Threat }
-  | { type: 'NO_THREAT_DETECTED' }
-  | { type: 'ACTIONS_CREATED'; actions: Action[] }
-  | { type: 'EXECUTION_COMPLETED'; results: { success: boolean; txHash: string; action: Action }[] }
-  | { type: 'ERROR'; error: Error };
+  | { type: "SIGNAL_RECEIVED"; signal: Signal }
+  | { type: "EVALUATE_SIGNALS" }
+  | { type: "THREAT_DETECTED"; threat: Threat }
+  | { type: "NO_THREAT_DETECTED" }
+  | { type: "ACTIONS_CREATED"; actions: Action[] }
+  | { type: "EXECUTION_COMPLETED"; results: ActionExecutionResult[] }
+  | { type: "ERROR"; error: Error };

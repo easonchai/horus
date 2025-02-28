@@ -201,7 +201,7 @@ export const horusMachine = setup({
         onDone: {
           target: "completed",
           actions: assign({
-            // @ts-expect-error - Actor output matches executionResults type
+            // @ts-expect-error - Actor output matches executionResults type but TypeScript cannot verify
             executionResults: ({ event }) => event.output,
           }),
         },

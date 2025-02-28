@@ -1,7 +1,7 @@
 import { Action } from "../models/types";
 import { TokenService } from "./token-service";
 
-interface ActionExecutionResult {
+export interface ActionExecutionResult {
   action: Action;
   status: "success" | "failed";
   txHash?: string;
