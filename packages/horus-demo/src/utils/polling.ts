@@ -25,6 +25,7 @@ export class TwitterPoller {
           content: tweet.content,
           timestamp: tweet.timestamp,
         };
+
         this.callback(signal);
       }
     }, intervalMs);
