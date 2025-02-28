@@ -1,6 +1,7 @@
 import { DependencyGraph } from "../models/config";
 import { Action, SignalEvaluationResult, Threat } from "../models/types";
 import { ProtocolService } from "./protocol-service";
+import { TokenService } from "./token-service";
 
 // This is a placeholder for the real AgentKit implementation
 export class AgentService {
@@ -111,8 +112,7 @@ export class AgentService {
   }
 
   private extractTokens(content: string): string[] {
-    const tokens = ["eth", "usdc", "usdt", "dai", "wbtc", "link"];
-    return tokens.filter((t) => content.toLowerCase().includes(t));
+    return TokenService.detectTokensInContent(content);
   }
 
   private extractChain(content: string): string | null {

@@ -34,3 +34,11 @@ export interface Action {
   token: string;
   params: Record<string, string | number | boolean>;
 }
+
+// Token types
+export interface Token {
+  name: string;
+  symbol: string;
+  decimals: number;
+  networks: Record<string, string>; // chainId -> address mapping
+}

@@ -35,6 +35,7 @@ The system uses strongly-typed data models to represent:
 - **Action**: Protective measures to be taken (swap/withdraw/revoke)
 - **Configuration**: Protocol and token information, dependency relationships
 - **SignalEvaluationResult**: Standardized result type for signal evaluation with support for error reporting
+- **Token**: Token metadata including name, symbol, decimal precision, and network addresses
 
 #### 3. Services
 
@@ -46,6 +47,7 @@ Specialized services handle specific business logic:
 - **AgentService**: Integrates with AI for enhanced analysis
 - **TwitterPoller**: Provides mock Twitter signals for testing
 - **ProtocolService**: Manages protocol data and normalization for consistent protocol references
+- **TokenService**: Centralizes token management, including detection, normalization, and address resolution
 
 #### 4. Configuration
 
@@ -77,42 +79,68 @@ Signal evaluation uses a robust protocol detection system that:
 - Handles edge cases including missing protocols or failed normalization
 - Provides detailed logging for debugging
 
+### 2. Token Detection and Normalization
+
+The system uses a comprehensive token handling system that:
+
+- Dynamically loads token data from the `tokens.json` configuration
+- Normalizes token symbols to ensure consistent references throughout the application
+- Validates tokens before performing blockchain actions
+- Resolves token addresses for specific chains from configuration
+- Provides detailed error handling and fallbacks
+
 ```typescript
-private detectProtocols(content: string): string[] {
+// Detect tokens in content with robust error handling
+public static detectTokensInContent(content: string): string[] {
+  if (!content) return [];
+
   try {
-    // Get all protocol names from the configuration
-    const protocolNames = ProtocolService.getAllProtocolNames();
-
-    if (!protocolNames || protocolNames.length === 0) {
-      console.warn("No protocol names available from ProtocolService");
-      return [];
-    }
-
-    // Convert to lowercase for matching
-    const protocolNamesLower = protocolNames.map(name => name.toLowerCase());
+    const contentLower = content.toLowerCase();
+    const allTokensLower = this.getAllTokenSymbolsLowercase();
 
     // Find matches in the content
-    const matchedProtocols = protocolNamesLower.filter(name =>
-      content.includes(name)
+    const matchedTokens = allTokensLower.filter(symbol =>
+      contentLower.includes(symbol)
     );
 
-    // Normalize protocol names and handle missing matches gracefully
-    return matchedProtocols.map(match => {
-      const normalized = ProtocolService.getNormalizedProtocolName(match);
-      if (!normalized) {
-        console.warn(`Could not normalize protocol name: ${match}`);
-        return match; // Fall back to the matched name
-      }
-      return normalized;
+    // Normalize token symbols with fallbacks
+    return matchedTokens.map(match => {
+      const normalized = this.getNormalizedTokenSymbol(match);
+      return normalized || match; // Fallback to detected token if normalization fails
     });
   } catch (error) {
-    console.error("Error in protocol detection:", error);
+    console.error(`[TokenService] Error detecting tokens: ${error}`);
     return []; // Return empty array on error
   }
 }
+
+// Validate tokens before executing blockchain actions
+try {
+  // Validate token exists in configuration
+  const normalizedToken = TokenService.getNormalizedTokenSymbol(action.token);
+  if (!normalizedToken) {
+    console.warn(`Invalid token ${action.token} - skipping action`);
+    results.push({
+      action,
+      status: "failed",
+      error: `Invalid token: ${action.token}`,
+      timestamp: Date.now(),
+    });
+    continue;
+  }
+
+  // Get token address for the specific chain
+  const tokenAddress = TokenService.getTokenAddress(
+    normalizedToken,
+    this.DEFAULT_CHAIN_ID
+  );
+} catch (error) {
+  // Structured error handling
+  console.error(`Error executing action for ${action.token}:`, error);
+}
 ```
 
-### 2. XState Actor Integration
+### 3. XState Actor Integration
 
 The state machine actors are designed for maximum stability:
 
@@ -169,7 +197,7 @@ const evaluateSignalsActor = fromPromise(
 );
 ```
 
-### 3. Structured Type System
+### 4. Structured Type System
 
 The system uses a robust type system to ensure data consistency:
 

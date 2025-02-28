@@ -1,6 +1,7 @@
 import { Signal, SignalEvaluationResult, Threat } from "../models/types";
 import { AgentService } from "./agent-service";
 import { ProtocolService } from "./protocol-service";
+import { TokenService } from "./token-service";
 
 export class SignalEvaluator {
   private agentService: AgentService;
@@ -128,10 +129,7 @@ export class SignalEvaluator {
    * Detect tokens mentioned in content
    */
   private detectTokens(content: string): string[] {
-    const tokens = ["eth", "usdc", "usdt", "dai", "wbtc"];
-    return tokens.filter((token) =>
-      content.toLowerCase().includes(token.toLowerCase())
-    );
+    return TokenService.detectTokensInContent(content);
   }
 
   /**
