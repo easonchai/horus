@@ -2,7 +2,6 @@ import { fromPromise } from "xstate";
 import { Action, SignalEvaluationResult, Threat } from "../models/types";
 import { ActionComposer } from "../services/action-composer";
 import { ActionExecutor } from "../services/action-executor";
-import { ProtocolService } from "../services/protocol-service";
 import { SignalEvaluator } from "../services/signal-evaluator";
 import { ThreatProcessor } from "../services/threat-processor";
 import { HorusContext } from "./types";
@@ -10,7 +9,7 @@ import { HorusContext } from "./types";
 // Create instances of our services
 const signalEvaluator = new SignalEvaluator();
 const threatProcessor = new ThreatProcessor();
-const actionComposer = new ActionComposer(ProtocolService.getDependencyGraph());
+const actionComposer = new ActionComposer();
 const actionExecutor = new ActionExecutor();
 
 /**

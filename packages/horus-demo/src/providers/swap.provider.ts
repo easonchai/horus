@@ -1,9 +1,9 @@
 /* eslint-disable @typescript-eslint/no-explicit-any */
-import { ActionProvider, WalletProvider, Network } from "@coinbase/agentkit";
+import { ActionProvider, Network, WalletProvider } from "@coinbase/agentkit";
 import { ethers } from "ethers";
-import tokens from "../../../../config/tokens.json";
 import protocols from "../../../../config/protocols.json";
-import dependencyGraph from "../../../../config/dependency_graph.json";
+import tokens from "../../../../config/tokens.json";
+import { DependencyGraphService } from "../services/dependency-graph-service";
 
 interface SwapParams {
   tokenIn: string;
@@ -32,13 +32,11 @@ const getTokenInfo = (symbol: string): TokenInfo => {
 
 // Get swap info from dependency graph
 const getSwapInfo = (symbol: string) => {
-  const dependency = dependencyGraph.dependencies.find(
-    (d) => d.derivativeSymbol === symbol
-  );
-  if (!dependency || !dependency.swapFunctions) {
+  const swapFunctions = DependencyGraphService.getSwapFunctions(symbol);
+  if (!swapFunctions || swapFunctions.length === 0) {
     throw new Error(`No swap functions found for ${symbol}`);
   }
-  return dependency.swapFunctions[0];
+  return swapFunctions[0];
 };
 
 // Get Uniswap addresses from protocols.json

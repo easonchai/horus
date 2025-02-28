@@ -1,5 +1,5 @@
-import { DependencyGraph } from "../models/config";
 import { Action, SignalEvaluationResult, Threat } from "../models/types";
+import { DependencyGraphService } from "./dependency-graph-service";
 import { ProtocolService } from "./protocol-service";
 import { TokenService } from "./token-service";
 
@@ -30,25 +30,22 @@ export class AgentService {
     };
   }
 
-  public async analyzeThreats(
-    threat: Threat,
-    dependencies: DependencyGraph
-  ): Promise<Threat> {
+  public async analyzeThreats(threat: Threat): Promise<Threat> {
     // Enhance threat with more analysis
     return {
       ...threat,
       severity: threat.severity === "medium" ? "high" : threat.severity,
       affectedTokens: [
         ...threat.affectedTokens,
-        ...this.getDependentTokens(threat.affectedProtocols, dependencies),
+        ...this.getDependentTokens(threat.affectedProtocols),
       ],
     };
   }
 
-  public async generateActionPlan(
-    threat: Threat,
-    dependencies: DependencyGraph
-  ): Promise<Action[]> {
+  public async generateActionPlan(threat: Threat): Promise<Action[]> {
+    // Get the dependency graph from the service
+    const dependencies = DependencyGraphService.getDependencyGraph();
+
     // Generate actions based on threat
     const actions: Action[] = [];
 
@@ -153,15 +150,12 @@ export class AgentService {
     }
   }
 
-  private getDependentTokens(
-    protocols: string[],
-    dependencies: DependencyGraph
-  ): string[] {
+  private getDependentTokens(protocols: string[]): string[] {
     const tokens: string[] = [];
     for (const protocol of protocols) {
-      if (dependencies[protocol]) {
-        tokens.push(...dependencies[protocol]);
-      }
+      tokens.push(
+        ...DependencyGraphService.getDependenciesByProtocol(protocol)
+      );
     }
     return [...new Set(tokens)]; // Remove duplicates
   }

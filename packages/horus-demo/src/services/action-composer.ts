@@ -1,6 +1,7 @@
 import { DependencyGraph } from "../models/config";
 import { Action, Threat } from "../models/types";
 import { AgentService } from "./agent-service";
+import { DependencyGraphService } from "./dependency-graph-service";
 import { ProtocolService } from "./protocol-service";
 import { TokenService } from "./token-service";
 
@@ -8,9 +9,11 @@ export class ActionComposer {
   private agentService: AgentService;
   private readonly DEFAULT_SAFE_TOKEN = "USDC";
   private validatedSafeToken: string;
+  private dependencyGraph: DependencyGraph;
 
-  constructor(private dependencyGraph: DependencyGraph) {
+  constructor() {
     this.agentService = new AgentService();
+    this.dependencyGraph = DependencyGraphService.getDependencyGraph();
 
     // Validate DEFAULT_SAFE_TOKEN at initialization time
     if (!TokenService.isValidToken(this.DEFAULT_SAFE_TOKEN)) {
@@ -47,8 +50,7 @@ export class ActionComposer {
 
       // Try to use AgentKit for smarter action composition with normalized threat
       const actions = await this.agentService.generateActionPlan(
-        normalizedThreat,
-        this.dependencyGraph
+        normalizedThreat
       );
       return actions;
     } catch (error) {
