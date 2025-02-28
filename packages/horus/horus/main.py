@@ -11,7 +11,13 @@ logging.basicConfig(level=logging.INFO, format='[%(asctime)s] %(message)s')
 logger = logging.getLogger(__name__)
 
 # Import and re-export the setup_agent function for backward compatibility
-from horus.agent_setup import setup_agent
+from horus.core.agent_kit import agent_kit_manager
+
+
+# Define setup_agent for backward compatibility
+def setup_agent():
+    """Set up all necessary components for the Horus agent (backward compatibility)."""
+    return agent_kit_manager.setup_agent()
 
 
 def main():

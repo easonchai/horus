@@ -2,16 +2,17 @@
 Command-line interface for the Horus security monitoring agent.
 """
 import argparse
+import json
 import logging
-import sys
 import os
-from typing import Dict, Any, Optional
+import sys
+from typing import Any, Dict, Optional
 
-from openai import OpenAI
 from dotenv import load_dotenv
-
 from horus.agents.security_agent import SecurityAgent
 from horus.agents.twitter_agent import TwitterAgent
+from horus.core.agent_kit import agent_kit_manager
+from openai import OpenAI
 
 # Configure logging
 logging.basicConfig(level=logging.INFO, format='[%(asctime)s] %(message)s')
@@ -26,9 +27,43 @@ class HorusApp:
         # Load environment variables
         load_dotenv()
         
-        # Use real OpenAI client
-        self.openai_client = OpenAI(api_key=os.getenv("OPENAI_API_KEY"))
-        self.security_agent = SecurityAgent(self.openai_client)
+        # Check for OpenAI API key
+        openai_api_key = os.getenv("OPENAI_API_KEY")
+        if not openai_api_key:
+            logger.error("Missing OPENAI_API_KEY in environment variables")
+            logger.warning("Add OPENAI_API_KEY=your_api_key_here to your .env file")
+        
+        # Initialize OpenAI client
+        self.openai_client = OpenAI(api_key=openai_api_key)
+        
+        # Initialize AgentKit using the simplified manager
+        logger.info("Initializing Coinbase AgentKit...")
+        try:
+            agentkit_components = agent_kit_manager.initialize_agentkit()
+            
+            # Log wallet status
+            if agentkit_components["wallet_address"]:
+                wallet_address = agentkit_components["wallet_address"]
+                logger.info(f"Wallet initialized with address: {wallet_address[:6]}...{wallet_address[-4:]}")
+            else:
+                logger.warning("No wallet initialized. Blockchain operations will be limited to simulation mode.")
+                
+        except Exception as e:
+            logger.error(f"Failed to initialize AgentKit: {str(e)}")
+            logger.warning("Blockchain operations will be limited to simulation mode")
+            agentkit_components = {
+                "wallet_provider": None,
+                "action_provider": None,
+                "wallet_address": None,
+                "agentkit": None
+            }
+        
+        # Initialize security agent with both OpenAI client and AgentKit
+        self.security_agent = SecurityAgent(
+            openai_client=self.openai_client,
+            agent_kit_manager=agent_kit_manager
+        )
+        
         self.twitter_agent = None
     
     def parse_args(self):

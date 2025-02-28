@@ -9,7 +9,6 @@ import re
 from typing import Any, Callable, Dict, List, Optional, Tuple
 
 from horus.tools import create_monitor_tool
-from horus.tools.agent_kit import agent_kit_manager
 from horus.tools.revoke import RevokeTool
 from horus.tools.swap import SwapTool
 from horus.tools.withdrawal import WithdrawalTool
@@ -32,18 +31,24 @@ class SecurityAgent:
     It uses AI to determine the appropriate response to security alerts.
     """
     
-    def __init__(self, openai_client, mock_openai=False, mock_twitter=True):
+    def __init__(self, openai_client, agent_kit_manager=None, mock_openai=False, mock_twitter=True):
         """
         Initialize the security agent.
     
     Args:
         openai_client: The OpenAI client.
+        agent_kit_manager: The AgentKit manager for blockchain transactions. If None, uses global instance.
         mock_openai: Whether to mock OpenAI responses. Should always be False in production.
         mock_twitter: Whether to mock Twitter responses.
         """
         self.openai_client = openai_client
         self.mock_openai = False  # Always set to False to ensure real OpenAI is used
         self.mock_twitter = mock_twitter
+        
+        # Use the provided agent_kit_manager or the global instance
+        from horus.core.agent_kit import \
+            agent_kit_manager as global_agent_kit_manager
+        self.agent_kit_manager = agent_kit_manager or global_agent_kit_manager
         
         # Load configuration files
         self.dependency_graph = self._load_dependency_graph()
@@ -374,7 +379,7 @@ class SecurityAgent:
             # Get wallet address from AgentKit for destination_address
             try:
                 # Initialize wallet if needed
-                wallet_provider, _ = agent_kit_manager.initialize_providers()
+                wallet_provider, _ = self.agent_kit_manager.initialize_providers()
                 wallet_address = wallet_provider.get_wallet_address()
                 
                 # Set destination_address from wallet

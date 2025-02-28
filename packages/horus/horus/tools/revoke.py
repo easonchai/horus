@@ -10,8 +10,9 @@ import os
 import re
 from typing import Any, Dict, Optional, Tuple, TypedDict, Union
 
-from .agent_kit import AGENTKIT_AVAILABLE, agent_kit_manager
-from .base import BaseTool
+from horus.core.agent_kit import AGENTKIT_AVAILABLE, agent_kit_manager
+from langchain.tools import BaseTool
+
 from .constants import DEFAULT_BLOCK_EXPLORERS, DEFAULT_CHAIN_ID
 
 # Configure logging

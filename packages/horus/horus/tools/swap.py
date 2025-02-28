@@ -26,7 +26,8 @@ import logging
 import os
 from typing import Any, Dict, List, Optional, Tuple, Union
 
-from .agent_kit import AGENTKIT_AVAILABLE, agent_kit_manager
+from horus.core.agent_kit import AGENTKIT_AVAILABLE, agent_kit_manager
+
 from .base import create_tool
 from .constants import (DEFAULT_BLOCK_EXPLORERS, DEFAULT_CHAIN_ID,
                         DEFAULT_FEE_TIER, DEFAULT_SLIPPAGE)

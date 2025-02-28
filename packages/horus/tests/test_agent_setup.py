@@ -14,12 +14,11 @@ class TestAgentSetup(unittest.TestCase):
 
     @patch('horus.agent_setup.os.getenv')
     @patch('horus.agent_setup.OpenAI')
-    def test_setup_agent_with_env_vars(self, mock_openai, mock_getenv):
+    @patch('horus.agent_setup.agent_kit_manager.initialize_agentkit')
+    def test_setup_agent_with_env_vars(self, mock_initialize_agentkit, mock_openai, mock_getenv):
         """Test that the agent setup works when environment variables are set."""
         # Mock environment variables
         mock_getenv.side_effect = lambda key: {
-            'CDP_API_KEY_NAME': 'test_key_name',
-            'CDP_API_KEY_PRIVATE_KEY': 'test_private_key',
             'OPENAI_API_KEY': 'test_openai_key'
         }.get(key)
 
@@ -27,43 +26,32 @@ class TestAgentSetup(unittest.TestCase):
         mock_openai_instance = MagicMock()
         mock_openai.return_value = mock_openai_instance
 
-        # Mock the imported modules
-        mock_agent_kit = MagicMock()
-        mock_agent_kit_instance = MagicMock()
-        mock_agent_kit.return_value = mock_agent_kit_instance
-
-        mock_cdp_toolkit = MagicMock()
-        mock_cdp_toolkit_instance = MagicMock()
-        mock_cdp_toolkit.return_value = mock_cdp_toolkit_instance
-        mock_cdp_toolkit_instance.get_tools.return_value = []
-
-        mock_agent_executor = MagicMock()
-        mock_create_openai_tools_agent = MagicMock()
-
-        # Create mock modules
-        mock_modules = {
-            'coinbase_agentkit': MagicMock(AgentKit=mock_agent_kit),
-            'coinbase_agentkit_langchain': MagicMock(CDPToolkit=mock_cdp_toolkit),
-            'langchain.agents': MagicMock(
-                AgentExecutor=mock_agent_executor,
-                create_openai_tools_agent=mock_create_openai_tools_agent
-            ),
-            'langchain.prompts': MagicMock(),
-            'langchain.memory': MagicMock(),
-            'langchain.schema.messages': MagicMock(),
+        # Mock agent_kit_manager.initialize_agentkit response
+        mock_initialize_agentkit.return_value = {
+            'wallet_provider': MagicMock(),
+            'action_provider': MagicMock(),
+            'wallet_address': '0x1234567890123456789012345678901234567890',
+            'agentkit': MagicMock()
         }
-        
-        with patch.dict('sys.modules', mock_modules):
-            # Call the function
-            result = setup_agent()
 
-            # Assertions
-            self.assertIsNotNone(result)
-            mock_openai.assert_called_once_with(api_key='test_openai_key')
+        # Call the function
+        result = setup_agent()
+
+        # Assertions
+        self.assertIsNotNone(result)
+        mock_openai.assert_called_once_with(api_key='test_openai_key')
+        mock_initialize_agentkit.assert_called_once()
+        
+        # Check that the result contains the expected components
+        self.assertIn('openai_client', result)
+        self.assertIn('agent_kit', result)
+        self.assertIn('wallet_provider', result)
+        self.assertIn('action_provider', result)
+        self.assertIn('wallet_address', result)
 
     @patch('horus.agent_setup.os.getenv')
-    @patch('horus.agent_setup.print')
-    def test_setup_agent_missing_env_vars(self, mock_print, mock_getenv):
+    @patch('horus.agent_setup.logger')
+    def test_setup_agent_missing_env_vars(self, mock_logger, mock_getenv):
         """Test that the agent setup fails when environment variables are missing."""
         # Mock missing environment variables
         mock_getenv.return_value = None
@@ -73,7 +61,27 @@ class TestAgentSetup(unittest.TestCase):
 
         # Assertions
         self.assertIsNone(result)
-        mock_print.assert_called()
+        mock_logger.error.assert_called()
+        mock_logger.warning.assert_called()
+
+    @patch('horus.agent_setup.os.getenv')
+    @patch('horus.agent_setup.OpenAI')
+    @patch('horus.agent_setup.agent_kit_manager.initialize_agentkit')
+    @patch('horus.agent_setup.logger')
+    def test_setup_agent_exception_handling(self, mock_logger, mock_initialize_agentkit, mock_openai, mock_getenv):
+        """Test that the agent setup handles exceptions properly."""
+        # Mock environment variables
+        mock_getenv.return_value = 'test_openai_key'
+        
+        # Mock exception in initialize_agentkit
+        mock_initialize_agentkit.side_effect = Exception("Test exception")
+        
+        # Call the function
+        result = setup_agent()
+        
+        # Assertions
+        self.assertIsNone(result)
+        mock_logger.error.assert_called_with("Error setting up agent: Test exception")
 
 
 if __name__ == '__main__':

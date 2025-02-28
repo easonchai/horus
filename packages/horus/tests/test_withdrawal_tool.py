@@ -13,6 +13,7 @@ import sys
 import unittest
 from unittest.mock import MagicMock, patch
 
+import pytest
 from dotenv import load_dotenv
 # Import the mock_agent_kit utilities
 from tests.mock_agent_kit import setup_mocks, teardown_mocks
@@ -99,22 +100,25 @@ class TestWithdrawalTool(unittest.TestCase):
 
     @classmethod
     def setUpClass(cls):
-        """Set up test fixtures that should be shared across all tests."""
-        # Set up mocks for AgentKit
-        cls.patches = setup_mocks()
+        """Set up the test class."""
+        # Load environment variables
+        load_dotenv()
         
-        # Import WithdrawalTool after setting up mocks
+        # Set up mocks
+        cls.mock_patches = setup_mocks()
+        
+        # Import here to ensure mocks are set up first
         from horus.tools.withdrawal import WithdrawalTool
         cls.WithdrawalTool = WithdrawalTool
         
-        from horus.tools.agent_kit import agent_kit_manager
+        from horus.core.agent_kit import agent_kit_manager
         cls.agent_kit_manager = agent_kit_manager
 
     @classmethod
     def tearDownClass(cls):
         """Clean up shared test fixtures."""
         # Tear down mocks
-        teardown_mocks(cls.patches)
+        teardown_mocks(cls.mock_patches)
 
     def setUp(self):
         """Set up test fixtures before each test."""

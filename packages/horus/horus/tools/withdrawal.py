@@ -10,8 +10,10 @@ import os
 import re
 from typing import Any, Dict, List, Optional, Union
 
-# Import the AgentKit manager
-from .agent_kit import AGENTKIT_AVAILABLE, agent_kit_manager
+import eth_utils
+from horus.core.agent_kit import AGENTKIT_AVAILABLE, agent_kit_manager
+from langchain.tools import BaseTool
+
 from .constants import COINGECKO_BASE_URL, DEFAULT_BLOCK_EXPLORERS
 
 logger = logging.getLogger(__name__)

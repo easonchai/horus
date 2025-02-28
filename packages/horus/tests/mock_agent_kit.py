@@ -45,6 +45,20 @@ class CdpWalletProvider:
             "address": self.wallet_address,
             "chain_id": "84532"
         }
+        
+    def export_wallet(self):
+        """
+        Export wallet data for persistence.
+        
+        Returns:
+            dict: A dictionary containing wallet data for persistence.
+        """
+        return {
+            "address": self.wallet_address,
+            "private_key": self.private_key,  # Store safely
+            "api_key": self.api_key,
+            "api_secret": self.api_secret
+        }
 
 # Mock class for CdpActionProvider
 class CdpActionProvider:
