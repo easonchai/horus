@@ -3,6 +3,7 @@ name = "horus"
 version = "0.1.0"
 description = "Horus project for EthDenver2025"
 authors = ["Your Name <your.email@example.com>"]
+packages = [{include = "*.py"}, {include = "agents"}, {include = "cli"}, {include = "core"}, {include = "mock"}, {include = "tools"}, {include = "utils"}]
 
 [tool.poetry.dependencies]
 python = "^3.10.12"
