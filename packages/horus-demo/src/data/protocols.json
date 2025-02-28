@@ -4,9 +4,9 @@
       "name": "Beefy",
       "chains": {
         "84532": {
-          "beefyUSDC-USDT-Vault": "0xbda17531D8E918E2114D155B9eC33D468C6c9AAd",
-          "beefyWBTC-EIGEN-Vault": "0x0c4f090C0B96a6C2b3f55e1A75832c6154D69E8D",
-          "beefyUSDC-EIGEN-Vault": "0x214344bD519467e20038302dd0D8A1AD3E8262C6"
+          "beefyUSDC-USDT-Vault": "0x280238AD65a5AB7fe79C2249d06Bb48494efdA8c",
+          "beefyWBTC-EIGEN-Vault": "0xD0b15294Ac43C99704aD7803ecaa510c4fFBf5Ff",
+          "beefyUSDC-EIGEN-Vault": "0x0A4DFdc1312fB96F83B444333800aBc7B7Bbdf85"
         }
       },
       "abis": {
@@ -44,7 +44,9 @@
       "name": "UniswapV3",
       "chains": {
         "84532": {
-          "nonfungiblePositionManager": "0x27F971cb582BF9E50F397e4d29a5C7A34f11faA2"
+          "nonfungiblePositionManager": "0x27F971cb582BF9E50F397e4d29a5C7A34f11faA2",
+          "swapRouter02": "0x94cC0AaC535CCDB3C01d6787D6413C739ae12bc4",
+          "quoterV2": "0xC5290058841028F1614F3A6F0F5816cAd0df5E27"
         }
       },
       "abis": {

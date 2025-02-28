@@ -1,34 +1,66 @@
-/**
- * Horus Demo
- *
- * A TypeScript package for demonstrating Horus functionality.
- */
+import { createActor } from "xstate";
+import { TwitterPoller } from "./mock/tweet-generator";
+import { horusMachine } from "./state/machine";
 
-import { showBanner, showShutdownBanner } from './ui';
-import { TwitterPoller } from './utils/polling';
+console.log("Starting Horus DeFi Protection System...");
 
+// Create the main Horus actor
+const horusActor = createActor(horusMachine, {
+  input: {
+    signals: [],
+    actionPlan: [],
+    executionResults: [],
+  },
+});
 
-/**
- * Main function to demonstrate the package functionality
- */
-export function main(): void {
-  // Display the ASCII art banner
-  showBanner('Twitter Security Monitoring Demo');
+// Subscribe to state changes
+horusActor.subscribe((state) => {
+  console.log(`[${new Date().toISOString()}] State: ${state.value}`);
 
-  const twitterPoller = new TwitterPoller((sig) => {
-    console.log(`Received signal: ${JSON.stringify(sig)}`);
+  // Log context for specific states
+  if (state.value === "evaluating") {
+    console.log(`Evaluating signal: "${state.context.currentSignal?.content}"`);
+  } else if (state.value === "processing") {
+    console.log(
+      `Processing threat: ${state.context.detectedThreat?.description}`
+    );
+  } else if (state.value === "composing") {
+    console.log(
+      `Composing actions for: ${state.context.detectedThreat?.affectedProtocols.join(
+        ", "
+      )}`
+    );
+  } else if (state.value === "executing") {
+    console.log(`Executing ${state.context.actionPlan.length} actions`);
+  } else if (state.value === "completed") {
+    console.log(`Completed ${state.context.executionResults.length} actions`);
+  } else if (state.value === "failed") {
+    console.log(`Error: ${state.context.error?.message}`);
+  }
+});
+
+// Start the Horus actor
+horusActor.start();
+
+// Create Twitter poller
+const twitterPoller = new TwitterPoller((signal) => {
+  console.log(`Received signal from Twitter: "${signal.content}"`);
+
+  // Send the signal to the Horus actor
+  horusActor.send({
+    type: "SIGNAL_RECEIVED",
+    signal,
   });
+});
 
-  twitterPoller.start();
+// Start polling for tweets
+twitterPoller.start(5000); // Poll every 5 seconds
 
-  // Setup graceful shutdown
-  process.on('SIGINT', () => {
-    showShutdownBanner();
-    process.exit(0);
-  });
-}
+// Handle application shutdown
+process.on("SIGINT", () => {
+  console.log("Shutting down Horus...");
+  twitterPoller.stop();
+  process.exit(0);
+});
 
-// Allow running directly with Node.js
-if (require.main === module) {
-  main();
-}
+console.log("Horus is now monitoring for security threats...");
