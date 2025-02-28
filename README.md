@@ -111,7 +111,7 @@ This installs pnpm (a fast, disk space efficient package manager) and uses it to
 4. Install Python dependencies via Poetry:
 
 ```bash
-mise exec -- poetry install
+mise exec -- pip install poetry
 ```
 
 This sets up a virtual environment and installs all Python dependencies defined in the pyproject.toml file.
