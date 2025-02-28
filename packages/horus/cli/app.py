@@ -31,7 +31,7 @@ class HorusApp:
         openai_api_key = os.getenv("OPENAI_API_KEY")
         if not openai_api_key:
             logger.error("Missing OPENAI_API_KEY in environment variables")
-            logger.warning("Add OPENAI_API_KEY=your_api_key_here to your .env file")
+            logger.warning("Please set OPENAI_API_KEY in your .env file or environment variables")
         
         # Initialize OpenAI client
         self.openai_client = OpenAI(api_key=openai_api_key)
@@ -82,9 +82,9 @@ class HorusApp:
         self._display_welcome_banner()
         
         # Show configuration
-        print("\033[1;33m[CONFIG]\033[0m OpenAI API Key:", "\033[1;32mConfigured ✓\033[0m" if os.getenv("OPENAI_API_KEY") else "\033[1;31mMissing ✗\033[0m")
-        print("\033[1;33m[CONFIG]\033[0m Twitter Credentials:", "\033[1;35mUsing Mocks\033[0m")
-        print("\033[1;33m[CONFIG]\033[0m CDP API:", "\033[1;35mUsing Mocks\033[0m")
+        print("\033[1;33m[CONFIG]\033[0m OpenAI API Key Status:", "\033[1;32mConfigured ✓\033[0m" if os.getenv("OPENAI_API_KEY") else "\033[1;31mMissing ✗\033[0m")
+        print("\033[1;33m[CONFIG]\033[0m Twitter API Status:", "\033[1;35mUsing Mocks\033[0m")
+        print("\033[1;33m[CONFIG]\033[0m CDP API Status:", "\033[1;35mUsing Mocks\033[0m")
         print("\033[1;33m[CONFIG]\033[0m Monitoring Interval:", f"\033[1;36m{args.interval} seconds\033[0m")
         print("\033[1;33m[CONFIG]\033[0m Demo Mode:", "\033[1;32mEnabled ✓\033[0m" if args.test else "\033[1;33mDisabled ✗\033[0m")
         print("-" * 80)

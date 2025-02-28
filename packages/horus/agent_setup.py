@@ -32,7 +32,7 @@ def setup_agent() -> Optional[Dict[str, Any]]:
     openai_api_key = os.getenv("OPENAI_API_KEY")
     if not openai_api_key:
         logger.error("Missing OPENAI_API_KEY in environment variables")
-        logger.warning("Please set OPENAI_API_KEY in a .env file or in your environment")
+        logger.warning("Please set OPENAI_API_KEY in your .env file or environment variables")
         return None
     
     try:
