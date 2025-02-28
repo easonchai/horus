@@ -14,7 +14,7 @@ import unittest
 from unittest.mock import MagicMock, patch
 
 import pytest
-from core.agent_kit import is_agentkit_available
+from horus.core.agent_kit import is_agentkit_available
 # Import the mock_agent_kit utilities
 from tests.mock_agent_kit import setup_mocks, teardown_mocks
 
@@ -93,10 +93,10 @@ class TestRevokeTool(unittest.TestCase):
         cls.patches = setup_mocks()
         
         # Import RevokeTool after setting up mocks
-        from tools.revoke import RevokeTool
+        from horus.tools.revoke import RevokeTool
         cls.RevokeTool = RevokeTool
         
-        from core.agent_kit import agent_kit_manager
+        from horus.core.agent_kit import agent_kit_manager
         cls.agent_kit_manager = agent_kit_manager
 
     @classmethod
@@ -356,7 +356,7 @@ class TestRevokeTool(unittest.TestCase):
         # Execute the revoke operation
         with patch('horus.tools.agent_kit.CdpActionProvider.execute_action') as mock_execute:
             # Configure the mock to return an error result
-            from core.agent_kit import ActionResult, ActionStatus
+            from horus.core.agent_kit import ActionResult, ActionStatus
             mock_execute.return_value = ActionResult(
                 ActionStatus.ERROR,
                 None,
@@ -430,7 +430,7 @@ class TestRevokeTool(unittest.TestCase):
     def test_revoke_with_service_failure(self):
         """Test revocation with service failure from AgentKit."""
         # Import needed here to maintain patch context
-        from core.agent_kit import ActionResult, ActionStatus
+        from horus.core.agent_kit import ActionResult, ActionStatus
 
         # Patch the execute_revoke method of agent_kit_manager to fail
 
@@ -445,12 +445,12 @@ class TestRevokeToolPrivateKeyLoading(unittest.TestCase):
         cls.patches = setup_mocks()
         
         # Import related modules
-        from core.agent_kit import (agent_kit_manager,
+        from horus.core.agent_kit import (agent_kit_manager,
                                           is_agentkit_available)
         cls.agent_kit_manager = agent_kit_manager
         cls.is_agentkit_available = is_agentkit_available
         
-        from tools.revoke import RevokeTool
+        from horus.tools.revoke import RevokeTool
         cls.RevokeTool = RevokeTool
 
     @classmethod

@@ -21,6 +21,6 @@ requires = ["poetry-core"]
 build-backend = "poetry.core.masonry.api"
 
 [tool.poetry.scripts]
-dev = "main:main"
-dev-twitter-mock = "main:main_twitter_mock"
-test = "main:test_multi_action_scenario"
+dev = "horus.main:main"
+dev-twitter-mock = "horus.main:main_twitter_mock"
+test = "horus.main:test_multi_action_scenario"

@@ -5,7 +5,7 @@ import json
 from datetime import datetime
 
 # Import the TwitterSecurityMonitor class
-from twitter_monitor import TwitterSecurityMonitor
+from horus.twitter_monitor import TwitterSecurityMonitor
 
 class TestTwitterSecurityMonitor:
     """Test suite for the TwitterSecurityMonitor class."""

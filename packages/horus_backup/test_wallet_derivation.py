@@ -19,8 +19,8 @@ logger = logging.getLogger(__name__)
 load_dotenv()
 
 # Import the tools - we need the same CdpWalletProvider implementation from each module
-from tools.withdrawal import WithdrawalTool, CdpWalletProvider as WithdrawalCdpWalletProvider
-from tools.revoke import RevokeTool, CdpWalletProvider as RevokeCdpWalletProvider
+from horus.tools.withdrawal import WithdrawalTool, CdpWalletProvider as WithdrawalCdpWalletProvider
+from horus.tools.revoke import RevokeTool, CdpWalletProvider as RevokeCdpWalletProvider
 
 def test_wallet_derivation():
     """Test if wallet address derivation is consistent across all tools."""

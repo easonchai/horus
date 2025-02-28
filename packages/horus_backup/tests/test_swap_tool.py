@@ -15,7 +15,7 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 from dotenv import load_dotenv
-from core.agent_kit import is_agentkit_available
+from horus.core.agent_kit import is_agentkit_available
 # Import the mock_agent_kit utilities for tests
 from tests.mock_agent_kit import setup_mocks, teardown_mocks
 
@@ -54,7 +54,7 @@ class MockActionResult:
 sys.modules['coinbase_agentkit.types'].ActionResult = MockActionResult
 
 # Now import the swap tool
-from tools.swap import SwapTool
+from horus.tools.swap import SwapTool
 
 # Sample test data
 SAMPLE_TOKENS_CONFIG = {
@@ -152,10 +152,10 @@ class TestSwapTool(unittest.TestCase):
         cls.patches = setup_mocks()
         
         # Import SwapTool after setting up mocks
-        from tools.swap import SwapTool
+        from horus.tools.swap import SwapTool
         cls.SwapTool = SwapTool
         
-        from core.agent_kit import agent_kit_manager
+        from horus.core.agent_kit import agent_kit_manager
         cls.agent_kit_manager = agent_kit_manager
 
     @classmethod
@@ -355,7 +355,7 @@ class TestSwapTool(unittest.TestCase):
         
         # Use the agent_kit_manager but with a patched execute_action that fails
         with patch('horus.tools.agent_kit.agent_kit_manager._cdp_action_provider.execute_action') as mock_execute:
-            from core.agent_kit import ActionResult, ActionStatus
+            from horus.core.agent_kit import ActionResult, ActionStatus
 
             # Create a failure result
             mock_execute.return_value = ActionResult(
@@ -534,7 +534,7 @@ class TestSwapTool(unittest.TestCase):
     def test_custom_response_formatting(self):
         """Test that the tool returns well-formatted responses with transaction links."""
         # Import needed here to maintain patch context
-        from core.agent_kit import ActionResult, ActionStatus
+        from horus.core.agent_kit import ActionResult, ActionStatus
 
         # Mock the agent_kit_manager to return a successful result
         # Patch directly in this test to avoid affecting others

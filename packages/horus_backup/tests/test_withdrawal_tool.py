@@ -29,7 +29,7 @@ load_dotenv()
 sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 # Import AGENTKIT_AVAILABLE from the withdrawal module
-from tools.withdrawal import AGENTKIT_AVAILABLE
+from horus.tools.withdrawal import AGENTKIT_AVAILABLE
 
 # Mock the coinbase_agentkit modules before importing WithdrawalTool
 sys.modules['coinbase_agentkit'] = MagicMock()
@@ -55,7 +55,7 @@ class MockActionResult:
 sys.modules['coinbase_agentkit.types'].ActionResult = MockActionResult
 
 # Now import the withdrawal tool
-from tools.withdrawal import WithdrawalTool
+from horus.tools.withdrawal import WithdrawalTool
 
 # Sample test data
 SAMPLE_TOKENS_CONFIG = {
@@ -108,10 +108,10 @@ class TestWithdrawalTool(unittest.TestCase):
         cls.mock_patches = setup_mocks()
         
         # Import here to ensure mocks are set up first
-        from tools.withdrawal import WithdrawalTool
+        from horus.tools.withdrawal import WithdrawalTool
         cls.WithdrawalTool = WithdrawalTool
         
-        from core.agent_kit import agent_kit_manager
+        from horus.core.agent_kit import agent_kit_manager
         cls.agent_kit_manager = agent_kit_manager
 
     @classmethod

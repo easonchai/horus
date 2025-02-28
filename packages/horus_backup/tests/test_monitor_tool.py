@@ -21,7 +21,7 @@ logger = logging.getLogger(__name__)
 sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 # Import the MonitorTool class and create_monitor_tool function
-from tools.monitor import MonitorTool, create_monitor_tool
+from horus.tools.monitor import MonitorTool, create_monitor_tool
 
 
 class TestMonitorTool(unittest.TestCase):

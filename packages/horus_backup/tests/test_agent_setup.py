@@ -6,7 +6,7 @@ from unittest.mock import MagicMock, patch
 # Add the parent directory to the path so we can import the horus module
 sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
-from agent_setup import setup_agent
+from horus.agent_setup import setup_agent
 
 
 class TestAgentSetup(unittest.TestCase):

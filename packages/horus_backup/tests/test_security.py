@@ -45,7 +45,7 @@ load_dotenv()
 sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 # Import the security agent
-from agents.security_agent import SecurityAgent
+from horus.agents.security_agent import SecurityAgent
 
 # Mock the coinbase_agentkit modules before importing any tools
 sys.modules['coinbase_agentkit'] = MagicMock()
@@ -71,7 +71,7 @@ class MockActionResult:
 sys.modules['coinbase_agentkit.types'].ActionResult = MockActionResult
 
 # Now import the security agent
-from agents.security_agent import SecurityAgent
+from horus.agents.security_agent import SecurityAgent
 
 # Sample test data for mocking
 SAMPLE_DEPENDENCY_GRAPH = {
