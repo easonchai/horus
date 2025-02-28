@@ -25,8 +25,15 @@
     "vitest": "^1.2.2"
   },
   "dependencies": {
+    "@coinbase/agentkit": "^0.2.3",
+    "@coinbase/agentkit-langchain": "^0.1.0",
+    "@langchain/core": "^0.2.13",
+    "@langchain/langgraph": "^0.0.20",
+    "@langchain/openai": "^0.0.18",
     "chalk": "^4.1.2",
+    "dotenv": "^16.4.5",
     "figlet": "^1.7.0",
+    "viem": "^2.7.9",
     "xstate": "^5.19.2"
   }
 }
