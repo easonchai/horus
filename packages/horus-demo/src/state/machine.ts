@@ -1,138 +1,208 @@
-import { setup, assign } from 'xstate';
-import { HorusContext, HorusEvent } from './types';
+import { assign, setup } from "xstate";
+import { actors } from "./actors";
+import { HorusContext, HorusEvent } from "./types";
 
 const initialContext: HorusContext = {
   signals: [],
   actionPlan: [],
-  executionResults: []
+  executionResults: [],
 };
 
+// The machine definition using XState v5 setup pattern
 export const horusMachine = setup({
   types: {
     context: {} as HorusContext,
     events: {} as HorusEvent,
+    input: {} as HorusContext,
+    output: {} as Record<string, unknown>,
   },
   actions: {
     assignSignal: assign({
-      signals: ({ context, event }) =>
-        event.type === 'SIGNAL_RECEIVED'
-          ? [...context.signals, event.signal]
-          : context.signals,
-      currentSignal: ({ event }) =>
-        event.type === 'SIGNAL_RECEIVED' ? event.signal : undefined,
+      signals: ({ context, event }) => {
+        if (event.type === "SIGNAL_RECEIVED") {
+          return [...context.signals, event.signal];
+        }
+        return context.signals;
+      },
+      currentSignal: ({ event }) => {
+        if (event.type === "SIGNAL_RECEIVED") {
+          return event.signal;
+        }
+        return undefined;
+      },
     }),
     assignThreat: assign({
-      detectedThreat: ({ event }) =>
-        event.type === 'THREAT_DETECTED' ? event.threat : undefined,
+      detectedThreat: ({ event }) => {
+        if (event.type === "THREAT_DETECTED") {
+          return event.threat;
+        }
+        return undefined;
+      },
     }),
     assignActions: assign({
-      actionPlan: ({ event }) =>
-        event.type === 'ACTIONS_CREATED' ? event.actions : [],
+      actionPlan: ({ event }) => {
+        if (event.type === "ACTIONS_CREATED") {
+          return event.actions;
+        }
+        return [];
+      },
     }),
     assignResults: assign({
-      executionResults: ({ event }) =>
-        event.type === 'EXECUTION_COMPLETED' ? event.results : [],
+      executionResults: ({ event }) => {
+        if (event.type === "EXECUTION_COMPLETED") {
+          return event.results;
+        }
+        return [];
+      },
     }),
     assignError: assign({
-      error: ({ event }) =>
-        event.type === 'ERROR' ? event.error : undefined,
+      error: ({ event }) => {
+        if (event.type === "ERROR") {
+          return event.error;
+        }
+        return undefined;
+      },
     }),
     clearCurrentSignal: assign({
-      currentSignal: undefined,
+      currentSignal: () => undefined,
     }),
   },
   guards: {
     hasSignals: ({ context }) => context.signals.length > 0,
+
+    isThreat: ({ event }) => {
+      console.log("isThreat guard check with event:", event);
+      // @ts-expect-error - Actor events in onDone have 'output' property
+      return Boolean(event.output?.isThreat);
+    },
+    isNotThreat: ({ event }) => {
+      console.log("isNotThreat guard check with event:", event);
+      // @ts-expect-error - Actor events in onDone have 'output' property
+      return event.output?.isThreat === false;
+    },
+  },
+  actors: {
+    evaluateSignals: actors.evaluateSignals,
+    processThreats: actors.processThreats,
+    composeActions: actors.composeActions,
+    executeActions: actors.executeActions,
   },
 }).createMachine({
-  id: 'horus',
-  initial: 'idle',
+  id: "horus",
+  initial: "idle",
   context: initialContext,
   states: {
     idle: {
       on: {
         SIGNAL_RECEIVED: {
-          target: 'evaluating',
-          actions: 'assignSignal',
+          target: "evaluating",
+          actions: { type: "assignSignal" },
         },
       },
     },
     evaluating: {
       invoke: {
-        src: 'evaluateSignals',
+        src: "evaluateSignals",
+        input: ({ context }) => ({ context }),
         onDone: [
           {
-            target: 'processing',
-            guard: ({ event }) => event.output.isThreat,
+            target: "processing",
+            guard: { type: "isThreat" },
             actions: assign({
-              detectedThreat: ({ event }) => event.output.threat,
+              detectedThreat: ({ event }) => {
+                console.log("Assigning detected threat:", event.output.threat);
+                return event.output.threat;
+              },
             }),
           },
           {
-            target: 'idle',
-            guard: ({ event }) => !event.output.isThreat,
-            actions: 'clearCurrentSignal',
+            target: "idle",
+            guard: { type: "isNotThreat" },
+            actions: { type: "clearCurrentSignal" },
           },
         ],
         onError: {
-          target: 'failed',
-          actions: 'assignError',
+          target: "failed",
+          actions: [
+            assign({
+              error: ({ event }) => event.error as Error,
+            }),
+            ({ context }) =>
+              console.error("Error in evaluating state:", context.error),
+          ],
+        },
+      },
+      on: {
+        // Handle manual transitions for testing
+        NO_THREAT_DETECTED: {
+          target: "idle",
+          actions: { type: "clearCurrentSignal" },
         },
       },
     },
     processing: {
       invoke: {
-        src: 'processThreats',
+        src: "processThreats",
+        input: ({ context }) => ({ context }),
         onDone: {
-          target: 'composing',
+          target: "composing",
           actions: assign({
             detectedThreat: ({ event }) => event.output,
           }),
         },
         onError: {
-          target: 'failed',
-          actions: 'assignError',
+          target: "failed",
+          actions: assign({
+            error: ({ event }) => event.error as Error,
+          }),
         },
       },
     },
     composing: {
       invoke: {
-        src: 'composeActions',
+        src: "composeActions",
+        input: ({ context }) => ({ context }),
         onDone: {
-          target: 'executing',
+          target: "executing",
           actions: assign({
             actionPlan: ({ event }) => event.output,
           }),
         },
         onError: {
-          target: 'failed',
-          actions: 'assignError',
+          target: "failed",
+          actions: assign({
+            error: ({ event }) => event.error as Error,
+          }),
         },
       },
     },
     executing: {
       invoke: {
-        src: 'executeActions',
+        src: "executeActions",
+        input: ({ context }) => ({ context }),
         onDone: {
-          target: 'completed',
+          target: "completed",
           actions: assign({
+            // @ts-expect-error - Actor output matches executionResults type
             executionResults: ({ event }) => event.output,
           }),
         },
         onError: {
-          target: 'failed',
-          actions: 'assignError',
+          target: "failed",
+          actions: assign({
+            error: ({ event }) => event.error as Error,
+          }),
         },
       },
     },
     completed: {
       after: {
-        1000: 'idle',
+        1000: "idle",
       },
     },
     failed: {
       on: {
-        EVALUATE_SIGNALS: 'evaluating',
+        EVALUATE_SIGNALS: "evaluating",
       },
     },
   },

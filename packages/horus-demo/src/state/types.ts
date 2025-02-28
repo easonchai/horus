@@ -5,7 +5,7 @@ export interface HorusContext {
   currentSignal?: Signal;
   detectedThreat?: Threat;
   actionPlan: Action[];
-  executionResults: Record<string, undefined>[];
+  executionResults: { success: boolean; txHash: string; action: Action }[];
   error?: Error;
 }
 
@@ -15,5 +15,5 @@ export type HorusEvent =
   | { type: 'THREAT_DETECTED'; threat: Threat }
   | { type: 'NO_THREAT_DETECTED' }
   | { type: 'ACTIONS_CREATED'; actions: Action[] }
-  | { type: 'EXECUTION_COMPLETED'; results: Record<string, undefined>[] }
+  | { type: 'EXECUTION_COMPLETED'; results: { success: boolean; txHash: string; action: Action }[] }
   | { type: 'ERROR'; error: Error };

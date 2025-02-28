@@ -1,8 +1,8 @@
-import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
-import { TwitterPoller } from '../src/mock/tweet-generator';
-import { Signal } from '../src/models/types';
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { TwitterPoller } from "../src/mock/tweet-generator";
+import { Signal } from "../src/models/types";
 
-describe('TwitterPoller', () => {
+describe("TwitterPoller", () => {
   beforeEach(() => {
     vi.useFakeTimers();
   });
@@ -11,7 +11,7 @@ describe('TwitterPoller', () => {
     vi.restoreAllMocks();
   });
 
-  it('should call callback with signal when polling', () => {
+  it("should call callback with signal when polling", () => {
     const mockCallback = vi.fn();
     const poller = new TwitterPoller(mockCallback);
 
@@ -26,7 +26,7 @@ describe('TwitterPoller', () => {
     poller.stop();
   });
 
-  it('should convert Tweet to Signal format', () => {
+  it("should convert Tweet to Signal format", () => {
     let capturedSignal: Signal | null = null;
     const callback = (signal: Signal) => {
       capturedSignal = signal;
@@ -37,9 +37,9 @@ describe('TwitterPoller', () => {
     vi.advanceTimersByTime(1000);
 
     expect(capturedSignal).not.toBeNull();
-    expect(capturedSignal?.source).toBe('twitter');
-    expect(typeof capturedSignal?.content).toBe('string');
-    expect(typeof capturedSignal?.timestamp).toBe('number');
+    expect(capturedSignal?.source).toBe("twitter");
+    expect(typeof capturedSignal?.content).toBe("string");
+    expect(typeof capturedSignal?.timestamp).toBe("number");
 
     poller.stop();
   });
