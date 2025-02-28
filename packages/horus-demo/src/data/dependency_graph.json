@@ -1,0 +1,163 @@
+{
+  "dependencies": [
+    {
+      "derivativeSymbol": "beefyUSDC-USDT",
+      "chainId": "84532",
+      "protocol": "Beefy",
+      "underlyings": ["UNI-V3-USDC-USDT-500"],
+      "exitFunctions": [
+        {
+          "contractType": "vault",
+          "functionName": "withdraw",
+          "arguments": [
+            {
+              "tokenId": "uint256"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "derivativeSymbol": "beefyWBTC-EIGEN",
+      "chainId": "84532",
+      "protocol": "Beefy",
+      "underlyings": ["UNI-V3-WBTC-EIGEN-500"],
+      "exitFunctions": [
+        {
+          "contractType": "vault",
+          "functionName": "withdraw",
+          "arguments": [
+            {
+              "tokenId": "uint256"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "derivativeSymbol": "beefyUSDC-EIGEN",
+      "chainId": "84532",
+      "protocol": "Beefy",
+      "underlyings": ["UNI-V3-USDC-EIGEN-500"],
+      "exitFunctions": [
+        {
+          "contractType": "vault",
+          "functionName": "withdraw",
+          "arguments": [
+            {
+              "tokenId": "uint256"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "derivativeSymbol": "UNI-V3-USDC-USDT-500",
+      "chainId": "84532",
+      "protocol": "UniswapV3",
+      "underlyings": [
+        { "symbol": "USDC", "ratio": "variable" },
+        { "symbol": "USDT", "ratio": "variable" }
+      ],
+      "exitFunctions": [
+        {
+          "contractType": "nonfungiblePositionManager",
+          "functionName": "decreaseLiquidity",
+          "arguments": [
+            {
+              "tokenId": "uint256",
+              "liquidity": "uint128",
+              "amount0Min": "uint256",
+              "amount1Min": "uint256",
+              "deadline": "uint256"
+            }
+          ]
+        },
+        {
+          "contractType": "nonfungiblePositionManager",
+          "functionName": "collect",
+          "arguments": [
+            {
+              "tokenId": "uint256",
+              "recipient": "address",
+              "amount0Max": "uint128",
+              "amount1Max": "uint128"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "derivativeSymbol": "UNI-V3-WBTC-EIGEN-500",
+      "chainId": "84532",
+      "protocol": "UniswapV3",
+      "underlyings": [
+        { "symbol": "WBTC", "ratio": "variable" },
+        { "symbol": "EIGEN", "ratio": "variable" }
+      ],
+      "exitFunctions": [
+        {
+          "contractType": "nonfungiblePositionManager",
+          "functionName": "decreaseLiquidity",
+          "arguments": [
+            {
+              "tokenId": "uint256",
+              "liquidity": "uint128",
+              "amount0Min": "uint256",
+              "amount1Min": "uint256",
+              "deadline": "uint256"
+            }
+          ]
+        },
+        {
+          "contractType": "nonfungiblePositionManager",
+          "functionName": "collect",
+          "arguments": [
+            {
+              "tokenId": "uint256",
+              "recipient": "address",
+              "amount0Max": "uint128",
+              "amount1Max": "uint128"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "derivativeSymbol": "UNI-V3-USDC-EIGEN-500",
+      "chainId": "84532",
+      "protocol": "UniswapV3",
+      "underlyings": [
+        { "symbol": "USDC", "ratio": "variable" },
+        { "symbol": "EIGEN", "ratio": "variable" }
+      ],
+      "exitFunctions": [
+        {
+          "contractType": "nonfungiblePositionManager",
+          "functionName": "decreaseLiquidity",
+          "arguments": [
+            {
+              "tokenId": "uint256",
+              "liquidity": "uint128",
+              "amount0Min": "uint256",
+              "amount1Min": "uint256",
+              "deadline": "uint256"
+            }
+          ]
+        },
+        {
+          "contractType": "nonfungiblePositionManager",
+          "functionName": "collect",
+          "arguments": [
+            {
+              "tokenId": "uint256",
+              "recipient": "address",
+              "amount0Max": "uint128",
+              "amount1Max": "uint128"
+            }
+          ]
+        }
+      ]
+    }
+  ]
+}
