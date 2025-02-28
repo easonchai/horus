@@ -8,10 +8,10 @@ import os
 import re
 from typing import Any, Callable, Dict, List, Optional, Tuple
 
-from horus.tools import create_monitor_tool
-from horus.tools.revoke import RevokeTool
-from horus.tools.swap import SwapTool
-from horus.tools.withdrawal import WithdrawalTool
+from tools import create_monitor_tool
+from tools.revoke import RevokeTool
+from tools.swap import SwapTool
+from tools.withdrawal import WithdrawalTool
 
 # Configure logging
 logging.basicConfig(level=logging.INFO, format='[%(asctime)s] %(message)s')
@@ -31,18 +31,24 @@ class SecurityAgent:
     It uses AI to determine the appropriate response to security alerts.
     """
     
-    def __init__(self, openai_client, mock_openai=False, mock_twitter=True):
+    def __init__(self, openai_client, agent_kit_manager=None, mock_openai=False, mock_twitter=True):
         """
         Initialize the security agent.
-        
-        Args:
-            openai_client: The OpenAI client.
-            mock_openai: Whether to mock OpenAI responses.
-            mock_twitter: Whether to mock Twitter responses.
+    
+    Args:
+        openai_client: The OpenAI client.
+        agent_kit_manager: The AgentKit manager for blockchain transactions. If None, uses global instance.
+        mock_openai: Whether to mock OpenAI responses. Should always be False in production.
+        mock_twitter: Whether to mock Twitter responses.
         """
         self.openai_client = openai_client
-        self.mock_openai = mock_openai
+        self.mock_openai = False  # Always set to False to ensure real OpenAI is used
         self.mock_twitter = mock_twitter
+        
+        # Use the provided agent_kit_manager or the global instance
+        from core.agent_kit import \
+            agent_kit_manager as global_agent_kit_manager
+        self.agent_kit_manager = agent_kit_manager or global_agent_kit_manager
         
         # Load configuration files
         self.dependency_graph = self._load_dependency_graph()
@@ -51,8 +57,9 @@ class SecurityAgent:
         self.protocols_config = self._load_protocols_config()
         
         # Initialize tools
-        self.withdrawal_tool = WithdrawalTool(self.dependency_graph, self.user_balances, self.protocols_config)
-        self.revoke_tool = RevokeTool(self.tokens_config, self.protocols_config)
+        self.withdrawal_tool = WithdrawalTool(self.tokens_config, self.protocols_config)
+        revoke_tool_instance = RevokeTool(self.tokens_config, self.protocols_config)
+        self.revoke_tool = revoke_tool_instance.tool
         self.swap_tool = SwapTool(self.tokens_config, self.protocols_config, self.dependency_graph)
         self.monitor_tool = create_monitor_tool()
     
@@ -308,7 +315,7 @@ class SecurityAgent:
         """
         Get the default monitoring action parameters.
         
-        Returns:
+    Returns:
             A tuple of ("monitor", default_parameters).
         """
         parameters = {
@@ -332,18 +339,29 @@ class SecurityAgent:
             response_json = json.loads(response_text)
             
             # If the response is a JSON object with an action_plan field
-            if "action_plan" in response_json and isinstance(response_json["action_plan"], list):
-                # Take the first action in the plan
-                if response_json["action_plan"]:
-                    action = response_json["action_plan"][0]
-                    return action.get("action", "unknown"), action.get("parameters", {})
+            if "action_plan" in response_json:
+                # Handle action_plan as a list (old format)
+                if isinstance(response_json["action_plan"], list):
+                    if response_json["action_plan"]:
+                        action = response_json["action_plan"][0]
+                        action_type = action.get("action", "unknown")
+                        parameters = action.get("parameters", {})
+                        return self._process_action_and_parameters(action_type, parameters)
+                
+                # Handle action_plan as an object (new format from OpenAI responses)
+                elif isinstance(response_json["action_plan"], dict):
+                    action_plan = response_json["action_plan"]
+                    # Get action_type from either "action" or "action_type" field
+                    action_type = action_plan.get("action") or action_plan.get("action_type", "unknown")
+                    parameters = action_plan.get("parameters", {})
+                    return self._process_action_and_parameters(action_type, parameters)
             
             # If we got here, JSON was valid but didn't have the expected structure
             return None
         except json.JSONDecodeError:
             # Not valid JSON
             return None
-    
+            
     def _parse_text_response(self, response_text: str) -> Tuple[str, Dict[str, Any]]:
         """
         Parse the response as plain text, looking for keywords and extracting parameters.
@@ -433,55 +451,124 @@ class SecurityAgent:
             # Default to monitoring in case of error
             return self._get_default_monitor_action()
     
-    def get_mock_response(self, alert_text: str) -> str:
+    def _process_action_and_parameters(self, action_type: str, parameters: Dict[str, Any]) -> Tuple[str, Dict[str, Any]]:
         """
-        Generate a mock response for testing purposes.
+        Process action type and parameters to ensure they are properly formatted.
         
         Args:
-            alert_text: The text of the security alert.
+            action_type: The type of action to take.
+            parameters: The parameters for the action.
             
         Returns:
-            A string describing the action taken.
+            A tuple of (action_type, parameters) with any necessary defaults or transformations applied.
         """
-        logger.info("Generating mock response")
-        
-        # Extract keywords from the alert text to determine the appropriate action
-        alert_lower = alert_text.lower()
-        
-        if "withdraw" in alert_lower or "vulnerability" in alert_lower:
-            parameters = {
-                "token": "USDC",
-                "amount": "ALL",
-                "destination": "safe_wallet",
-                "chain_id": "84532",  # Base chain
-                "user_address": "0xf39Fd6e51aad88F6F4ce6aB8827279cffFb92266"
-            }
-            return self.withdrawal_tool(parameters)
+        # Normalize action type
+        if action_type.lower() in ["withdraw", "withdrawal"]:
+            action_type = "withdrawal"
             
-        elif "swap" in alert_lower or "convert" in alert_lower:
-            parameters = {
-                "token_in": "ETH",
-                "token_out": "USDC",
-                "amount_in": "1.0",
-                "chain_id": "84532"  # Base chain
-            }
-            return self.swap_tool(parameters)
+            # Get wallet address from AgentKit for destination_address
+            try:
+                # Initialize wallet if needed
+                wallet_provider, _ = self.agent_kit_manager.initialize_providers()
+                wallet_address = wallet_provider.get_wallet_address()
+                
+                # Set destination_address from wallet
+                parameters["destination_address"] = wallet_address
+                logger.info(f"Using wallet address as destination: {wallet_address}")
+            except Exception as e:
+                logger.error(f"Failed to get wallet address from AgentKit: {str(e)}")
+                # Use a fallback address if AgentKit is not available
+                parameters["destination_address"] = "0xf39Fd6e51aad88F6F4ce6aB8827279cffFb92266"
+                logger.warning(f"Using fallback destination address: {parameters['destination_address']}")
             
-        elif "revoke" in alert_lower or "permissions" in alert_lower:
-            parameters = {
-                "token": "USDC",
-                "protocol": "Compromised Protocol",
-                "chain_id": "84532"  # Base chain
-            }
-            return self.revoke_tool(parameters)
+            # Handle the case where token comes from a "tokens" array
+            if "tokens" in parameters and not parameters.get("token"):
+                tokens = parameters.get("tokens", [])
+                if tokens:
+                    # If tokens is a list of strings
+                    if isinstance(tokens[0], str):
+                        parameters["token"] = tokens[0]
+                    # If tokens is a list of dicts
+                    elif isinstance(tokens[0], dict) and "token" in tokens[0]:
+                        parameters["token"] = tokens[0]["token"]
+                    elif isinstance(tokens[0], dict) and "token_name" in tokens[0]:
+                        parameters["token"] = tokens[0]["token_name"]
             
-        else:
-            parameters = {
-                "asset": "All Base Chain Positions",
-                "duration": "48h",
-                "threshold": "3%"
-            }
-            return self.monitor_tool(parameters)
+            # Set default amount if missing
+            if "amount" not in parameters:
+                parameters["amount"] = "all"
+            
+            # Set default chain_id if missing
+            if "chain_id" not in parameters:
+                parameters["chain_id"] = "1"  # Default to Ethereum mainnet
+                
+        elif action_type.lower() in ["revoke", "revocation"]:
+            action_type = "revoke"
+            
+            # For revoke actions, we need a valid spender_address
+            # This will usually come from the protocol configuration
+            if "protocol" in parameters and "spender_address" not in parameters:
+                protocol = parameters.get("protocol", "").lower()
+                chain_id = parameters.get("chain_id", "1")
+                
+                # Try to find the protocol's router address in the configuration
+                try:
+                    protocol_data = None
+                    for p in self.protocols_config.get("protocols", []):
+                        if p["name"].lower() == protocol.lower():
+                            protocol_data = p
+                            break
+                    
+                    if protocol_data and "chains" in protocol_data:
+                        chain_data = protocol_data["chains"].get(chain_id, {})
+                        # Look for potential spender address keys
+                        potential_keys = ["router", "swapRouter", "approvalAddress"]
+                        for key in potential_keys:
+                            if key in chain_data:
+                                parameters["spender_address"] = chain_data[key]
+                                logger.info(f"Using {protocol} {key} as spender address: {parameters['spender_address']}")
+                                break
+                except Exception as e:
+                    logger.error(f"Error finding spender address for protocol {protocol}: {str(e)}")
+            
+            # If we still don't have a spender_address, and there's an approval_address parameter, use that
+            if "spender_address" not in parameters and "approval_address" in parameters:
+                parameters["spender_address"] = parameters["approval_address"]
+                
+            # If we still don't have a spender_address, use a known address for the specified protocol
+            if "spender_address" not in parameters and "protocol" in parameters:
+                protocol = parameters.get("protocol", "").lower()
+                if "uniswap" in protocol:
+                    parameters["spender_address"] = "0x8D71832C0Fb9Ef50A5bf57C50fd92b2516c1D574"  # Known Uniswap router
+                    logger.info(f"Using known Uniswap router as spender address: {parameters['spender_address']}")
+            
+        elif action_type.lower() in ["swap", "exchange", "convert"]:
+            action_type = "swap"
+            
+            # Handle token mapping
+            if "tokens" in parameters:
+                tokens = parameters.get("tokens", [])
+                if tokens and isinstance(tokens, list) and len(tokens) >= 2:
+                    if not parameters.get("token_in"):
+                        parameters["token_in"] = tokens[0]
+                    if not parameters.get("token_out"):
+                        parameters["token_out"] = tokens[1]
+                        
+        elif action_type.lower() in ["monitor", "monitoring"]:
+            action_type = "monitor"
+            
+            # Convert "asset" or "asset_to_monitor" to standard format
+            if "asset_to_monitor" in parameters and "asset" not in parameters:
+                parameters["asset"] = parameters["asset_to_monitor"]
+                
+            # Set default duration and threshold if missing
+            if "duration" not in parameters:
+                parameters["duration"] = "24h"
+                
+            if "threshold" not in parameters:
+                parameters["threshold"] = "5%"
+                
+        return action_type, parameters
     
     def process_alert(self, alert_text: str) -> str:
         """
@@ -493,47 +580,125 @@ class SecurityAgent:
         Returns:
             A string describing the action taken.
         """
-        # Prepare the context for the AI
+        print("\n" + "="*80)
+        print("\033[1;36m🔍 SECURITY ALERT DETECTED 🔍\033[0m")
+        print("="*80)
+        print(f"\033[1;33mAlert:\033[0m {alert_text}")
+        print("-"*80)
+        
+        # Prepare context information for OpenAI
+        logger.info("\033[1;32m[ANALYSIS]\033[0m Preparing context for AI analysis...")
         context = self.prepare_context_for_ai()
         
-        # If we're mocking OpenAI, return a mock response
-        if self.mock_openai:
-            logger.info("Using mock OpenAI response")
-            return self.get_mock_response(alert_text)
+        # Create a system prompt
+        system_prompt = """
+        You are a cryptocurrency security agent tasked with protecting user funds. Analyze the security alert and 
+        determine the appropriate protective action to take. Your response should include a JSON object with an 
+        "action_plan" field.
         
-        # Otherwise, use the OpenAI API to process the alert
+        Available actions:
+        1. withdraw - Withdraw funds from a compromised protocol or token
+           Required parameters: 
+            - token: The token symbol to withdraw (e.g., "ETH", "USDC")
+            - amount: The amount to withdraw (e.g., "all", "1.5")
+            - chain_id: The blockchain ID (e.g., "1" for Ethereum, "84532" for Base)
+            
+        2. revoke - Revoke token approvals for a compromised or suspicious protocol
+           Required parameters:
+            - token: The token symbol (e.g., "USDC")
+            - protocol: The protocol to revoke from (e.g., "UniswapV3") 
+            - chain_id: The blockchain ID
+            
+        3. monitor - Set up enhanced monitoring for a specific asset
+           Required parameters:
+            - asset: The asset to monitor (e.g., "ETH", "All Positions")
+            - duration: Monitoring duration (e.g., "24h", "3d")
+            - threshold: Alert threshold (e.g., "5%")
+            
+        4. swap - Swap a vulnerable token for a safer asset
+           Required parameters:
+            - token_in: The input token symbol (e.g., "ETH")
+            - token_out: The output token symbol (e.g., "USDC")
+            - amount_in: The amount to swap (e.g., "all", "1.5")
+            - chain_id: The blockchain ID
+        
+        IMPORTANT: DO NOT provide any addresses in your response. Addresses will be handled internally by the system.
+        
+        Return your response in this exact format:
+        {
+            "action_plan": {
+                "action_type": "withdraw", // or "revoke", "monitor", "swap"
+                "parameters": {
+                    // Include ALL required parameters for the selected action
+                }
+            }
+        }
+        """
+        
+        # Create a user prompt
+        user_prompt = f"""
+        Security Alert: {alert_text}
+        
+        Context Information:
+        {context}
+        
+        Based on this alert, what protective action should be taken? Return a JSON object with 
+        an "action_plan" field that specifies the action type and ALL required parameters listed in my instructions.
+        """
+        
         try:
-            response = self.openai_client.chat.completions.create(
-                model="gpt-4o",
+            logger.info("\033[1;32m[ANALYSIS]\033[0m Sending alert to OpenAI for analysis...")
+            completion = self.openai_client.chat.completions.create(
                 messages=[
-                    {"role": "system", "content": context},
-                    {"role": "user", "content": f"SECURITY ALERT: {alert_text}"}
+                    {"role": "system", "content": system_prompt},
+                    {"role": "user", "content": user_prompt}
                 ],
-                temperature=0.2,
+                model="gpt-3.5-turbo",
             )
-            
-            # Extract the response text
-            response_text = response.choices[0].message.content
-            logger.info(f"OpenAI response: {response_text}")
-            
-            # Parse the response to determine the action to take
-            action_type, parameters = self.parse_ai_response(response_text)
-            
-            # Take the appropriate action
-            if action_type == "withdrawal":
-                return self.withdrawal_tool(parameters)
-            elif action_type == "swap":
-                return self.swap_tool(parameters)
-            elif action_type == "revoke":
-                return self.revoke_tool(parameters)
-            elif action_type == "monitor":
-                return self.monitor_tool(parameters)
-            else:
-                return f"No action taken. AI response: {response_text}"
-            
+            response = completion.choices[0].message.content
+            logger.info("\033[1;32m[ANALYSIS]\033[0m Received response from OpenAI")
         except Exception as e:
-            logger.error(f"Error processing security alert: {e}")
-            return f"Error processing security alert: {e}"
+            logger.error(f"\033[1;31m[ERROR]\033[0m Failed to get OpenAI response: {str(e)}")
+            # No fallback to mock response
+            response = "Error processing security alert. Please check your OpenAI API key and try again."
+        
+        logger.info("\033[1;32m[RESPONSE]\033[0m AI response received:")
+        # Print a truncated version of the response for demo purposes
+        truncated_response = response[:200] + "..." if len(response) > 200 else response
+        print(f"\033[1;37m{truncated_response}\033[0m")
+        print("-"*80)
+        
+        # Parse the response to determine the action to take
+        logger.info("\033[1;32m[PROCESSING]\033[0m Parsing AI response to determine action...")
+        action, parameters = self.parse_ai_response(response)
+        
+        logger.info(f"\033[1;32m[ACTION]\033[0m Determined action: \033[1;36m{action.upper()}\033[0m")
+        logger.info(f"\033[1;32m[PARAMETERS]\033[0m Action parameters: {parameters}")
+        
+        # Execute the appropriate action
+        result = "No action taken."
+        
+        if action == "withdraw" or action == "withdrawal":
+            print(f"\033[1;34m🔒 EXECUTING WITHDRAWAL ACTION 🔒\033[0m")
+            result = self.withdrawal_tool(parameters)
+        elif action == "revoke":
+            print(f"\033[1;34m🔒 EXECUTING REVOCATION ACTION 🔒\033[0m")
+            result = self.revoke_tool(parameters)
+        elif action == "monitor":
+            print(f"\033[1;34m🔎 EXECUTING MONITORING ACTION 🔎\033[0m")
+            result = self.monitor_tool(parameters)
+        elif action == "swap":
+            print(f"\033[1;34m🔄 EXECUTING SWAP ACTION 🔄\033[0m")
+            result = self.swap_tool(parameters)
+        else:
+            logger.warning(f"\033[1;33m[WARNING]\033[0m Unknown action: {action}")
+            print(f"\033[1;33m⚠️ UNKNOWN ACTION: {action} ⚠️\033[0m")
+        
+        print("-"*80)
+        print(f"\033[1;32m✅ RESULT:\033[0m {result}")
+        print("="*80 + "\n")
+        
+        return result
     
     # Compatibility methods for backward compatibility
     def process_security_alert(self, alert_text: str) -> str:
@@ -547,10 +712,6 @@ class SecurityAgent:
     def _parse_ai_response(self, response_text: str) -> Tuple[str, Dict[str, Any]]:
         """Alias for parse_ai_response for backward compatibility."""
         return self.parse_ai_response(response_text)
-    
-    def _get_mock_response(self, alert_text: str) -> str:
-        """Alias for get_mock_response for backward compatibility."""
-        return self.get_mock_response(alert_text)
     
     def _try_parse_json_response(self, response_text: str) -> Optional[Tuple[str, Dict[str, Any]]]:
         """Alias for try_parse_json_response for backward compatibility."""

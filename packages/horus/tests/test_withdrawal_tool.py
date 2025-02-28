@@ -1,6 +1,10 @@
 #!/usr/bin/env python3
 """
-Test script for the Withdrawal Tool.
+Unit tests for the WithdrawalTool class in the Horus security system.
+
+This test suite provides comprehensive testing for the WithdrawalTool class,
+covering its initialization, token address resolution, validation, and
+execution of withdrawal operations.
 """
 import json
 import logging
@@ -9,9 +13,12 @@ import sys
 import unittest
 from unittest.mock import MagicMock, patch
 
+import pytest
 from dotenv import load_dotenv
+# Import the mock_agent_kit utilities
+from tests.mock_agent_kit import setup_mocks, teardown_mocks
 
-# Configure logging
+# Configure logging for test
 logging.basicConfig(level=logging.INFO, format='[%(asctime)s] %(message)s')
 logger = logging.getLogger(__name__)
 
@@ -20,6 +27,9 @@ load_dotenv()
 
 # Add the parent directory to the path
 sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+
+# Import AGENTKIT_AVAILABLE from the withdrawal module
+from tools.withdrawal import AGENTKIT_AVAILABLE
 
 # Mock the coinbase_agentkit modules before importing WithdrawalTool
 sys.modules['coinbase_agentkit'] = MagicMock()
@@ -45,380 +55,305 @@ class MockActionResult:
 sys.modules['coinbase_agentkit.types'].ActionResult = MockActionResult
 
 # Now import the withdrawal tool
-from horus.tools.withdrawal import WithdrawalTool
+from tools.withdrawal import WithdrawalTool
 
 # Sample test data
-SAMPLE_DEPENDENCY_GRAPH = {
-    "nodes": [
+SAMPLE_TOKENS_CONFIG = {
+    "tokens": [
         {
-            "symbol": "USDC-USDT-LP",
-            "chainId": "84532",
-            "exitFunctions": [
-                {
-                    "contractType": "BeefyVault",
-                    "functionName": "withdraw",
-                    "contractAddress": "0xDb9ADe9917F2b9F67F569112DeADe3506f2177b2"
-                }
-            ]
-        }
-    ]
-}
-
-SAMPLE_USER_BALANCES = {
-    "0xf39Fd6e51aad88F6F4ce6aB8827279cffFb92266": {
-        "84532": {
-            "positions": [
-                {
-                    "protocol": "Beefy",
-                    "symbol": "USDC-USDT-LP",
-                    "tokenId": "123",
-                    "contractKey": "beefyUSDC-USDT-Vault"
-                },
-                {
-                    "protocol": "UniswapV3",
-                    "symbol": "USDC-WETH-LP",
-                    "tokenId": "456",
-                    "liquidity": "1000000"
-                }
-            ]
-        }
-    }
-}
-
-SAMPLE_PROTOCOLS = {
-    "protocols": [
-        {
-            "name": "Beefy",
-            "chains": {
-                "84532": {
-                    "beefyUSDC-USDT-Vault": "0xDb9ADe9917F2b9F67F569112DeADe3506f2177b2"
-                }
-            },
-            "abis": {
-                "BeefyVault": [
-                    {
-                        "inputs": [
-                            {
-                                "internalType": "uint256",
-                                "name": "tokenId",
-                                "type": "uint256"
-                            }
-                        ],
-                        "name": "withdraw",
-                        "outputs": [],
-                        "stateMutability": "nonpayable",
-                        "type": "function"
-                    }
-                ]
+            "symbol": "USDC",
+            "name": "USD Coin",
+            "networks": {
+                "84532": "0xf175520c52418dfe19c8098071a252da48cd1c19",
+                "1": "0xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb48"
             }
         },
         {
-            "name": "UniswapV3",
-            "chains": {
-                "84532": {
-                    "nonfungiblePositionManager": "0x27F971cb582BF9E50F397e4d29a5C7A34f11faA2"
-                }
-            },
-            "abis": {
-                "NonfungiblePositionManager": [
-                    {
-                        "inputs": [
-                            {
-                                "internalType": "uint256",
-                                "name": "tokenId",
-                                "type": "uint256"
-                            },
-                            {
-                                "internalType": "uint128",
-                                "name": "liquidity",
-                                "type": "uint128"
-                            },
-                            {
-                                "internalType": "uint256",
-                                "name": "amount0Min",
-                                "type": "uint256"
-                            },
-                            {
-                                "internalType": "uint256",
-                                "name": "amount1Min",
-                                "type": "uint256"
-                            },
-                            {
-                                "internalType": "uint256",
-                                "name": "deadline",
-                                "type": "uint256"
-                            }
-                        ],
-                        "name": "decreaseLiquidity",
-                        "outputs": [],
-                        "stateMutability": "nonpayable",
-                        "type": "function"
-                    },
-                    {
-                        "inputs": [
-                            {
-                                "internalType": "uint256",
-                                "name": "tokenId",
-                                "type": "uint256"
-                            },
-                            {
-                                "internalType": "address",
-                                "name": "recipient",
-                                "type": "address"
-                            },
-                            {
-                                "internalType": "uint128",
-                                "name": "amount0Max",
-                                "type": "uint128"
-                            },
-                            {
-                                "internalType": "uint128",
-                                "name": "amount1Max",
-                                "type": "uint128"
-                            }
-                        ],
-                        "name": "collect",
-                        "outputs": [],
-                        "stateMutability": "nonpayable",
-                        "type": "function"
-                    }
-                ]
+            "symbol": "ETH",
+            "name": "Ethereum",
+            "networks": {
+                "84532": "0x4200000000000000000000000000000000000006",
+                "1": "0xeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee"
             }
         }
     ]
 }
 
+SAMPLE_PROTOCOLS_CONFIG = {
+    "protocols": [
+        {
+            "name": "Coinbase",
+            "chains": {
+                "84532": {
+                    "exchange_id": "coinbase_pro"
+                },
+                "1": {
+                    "exchange_id": "coinbase_pro"
+                }
+            }
+        }
+    ]
+}
 
 class TestWithdrawalTool(unittest.TestCase):
-    """Test case for the WithdrawalTool."""
-    
+    """Test cases for the WithdrawalTool class."""
+
+    @classmethod
+    def setUpClass(cls):
+        """Set up the test class."""
+        # Load environment variables
+        load_dotenv()
+        
+        # Set up mocks
+        cls.mock_patches = setup_mocks()
+        
+        # Import here to ensure mocks are set up first
+        from tools.withdrawal import WithdrawalTool
+        cls.WithdrawalTool = WithdrawalTool
+        
+        from core.agent_kit import agent_kit_manager
+        cls.agent_kit_manager = agent_kit_manager
+
+    @classmethod
+    def tearDownClass(cls):
+        """Clean up shared test fixtures."""
+        # Tear down mocks
+        teardown_mocks(cls.mock_patches)
+
     def setUp(self):
-        """Set up test fixtures."""
-        # Create a mock for CdpActionProvider
-        self.mock_action_provider = MagicMock()
-        self.mock_wallet_provider = MagicMock()
+        """Set up test fixtures before each test."""
+        logger.info("WithdrawalTool test setup complete")
+        self.withdrawal_tool = self.WithdrawalTool(SAMPLE_TOKENS_CONFIG, SAMPLE_PROTOCOLS_CONFIG)
+
+    def test_init(self):
+        """Test initialization of WithdrawalTool."""
+        self.assertEqual(self.withdrawal_tool.name, "withdrawal")
+        self.assertEqual(self.withdrawal_tool.tokens_config, SAMPLE_TOKENS_CONFIG)
+        self.assertIsNotNone(self.withdrawal_tool.block_explorers)
+
+    def test_get_token_address(self):
+        """Test token address resolution."""
+        # Test with a known token and chain
+        token_address = self.withdrawal_tool.get_token_address("USDC", "84532")
+        self.assertEqual(token_address, "0xf175520c52418dfe19c8098071a252da48cd1c19")
         
-        # Configure the mock to return a success result
-        mock_result = MagicMock()
-        mock_result.status = "SUCCESS"
-        mock_result.transaction_hash = "0x1234567890abcdef"
-        mock_result.message = "Transaction successful"
-        self.mock_action_provider.execute_contract_write.return_value = mock_result
+        # Test with a known token and different chain
+        token_address = self.withdrawal_tool.get_token_address("USDC", "1")
+        self.assertEqual(token_address, "0xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb48")
         
-        # Configure wallet provider to return a default account
-        self.mock_wallet_provider.get_default_account.return_value = "0xDefaultAccount"
+        # Test with an unknown token
+        token_address = self.withdrawal_tool.get_token_address("NONEXISTENT", "84532")
+        self.assertEqual(token_address, "unknown")
         
-        # Create patches
-        self.action_provider_patcher = patch('horus.tools.withdrawal.CdpActionProvider')
-        self.wallet_provider_patcher = patch('horus.tools.withdrawal.CdpWalletProvider')
+        # Test with an unknown chain
+        token_address = self.withdrawal_tool.get_token_address("USDC", "999")
+        self.assertEqual(token_address, "unknown")
+
+    def test_get_explorer_url(self):
+        """Test block explorer URL generation."""
+        # Test with a known chain
+        tx_hash = "0x1234567890abcdef1234567890abcdef12345678"
+        explorer_url = self.withdrawal_tool.get_explorer_url("84532", tx_hash)
+        expected_url = f"https://sepolia.basescan.org/tx/{tx_hash}"
+        self.assertEqual(explorer_url, expected_url)
         
-        # Start the patches
-        mock_action_provider_class = self.action_provider_patcher.start()
-        mock_wallet_provider_class = self.wallet_provider_patcher.start()
+        # Test with an unknown chain
+        explorer_url = self.withdrawal_tool.get_explorer_url("999", tx_hash)
+        self.assertIsNone(explorer_url)
+
+    def test_valid_eth_address(self):
+        """Test Ethereum address validation."""
+        # Test with a valid address
+        valid_address = "0x1234567890abcdef1234567890abcdef12345678"
+        self.assertTrue(self.withdrawal_tool._is_valid_eth_address(valid_address))
         
-        # Configure the mock classes to return our mocks
-        mock_action_provider_class.return_value = self.mock_action_provider
-        mock_wallet_provider_class.return_value = self.mock_wallet_provider
+        # Test with an invalid address (too short)
+        invalid_address1 = "0x1234"
+        self.assertFalse(self.withdrawal_tool._is_valid_eth_address(invalid_address1))
         
-        # Mark AgentKit as available
-        with patch('horus.tools.withdrawal.AGENTKIT_AVAILABLE', True):
-            self.withdrawal_tool = WithdrawalTool(
-                SAMPLE_DEPENDENCY_GRAPH,
-                SAMPLE_USER_BALANCES,
-                SAMPLE_PROTOCOLS
-            )
+        # Test with an invalid address (not starting with 0x)
+        invalid_address2 = "1234567890abcdef1234567890abcdef12345678"
+        self.assertFalse(self.withdrawal_tool._is_valid_eth_address(invalid_address2))
         
-        # Set the mocks directly on the instance
-        self.withdrawal_tool._cdp_action_provider = self.mock_action_provider
-        self.withdrawal_tool._cdp_wallet_provider = self.mock_wallet_provider
-    
-    def tearDown(self):
-        """Clean up after the test."""
-        # Stop the patches
-        self.action_provider_patcher.stop()
-        self.wallet_provider_patcher.stop()
-    
-    def test_get_user_positions(self):
-        """Test retrieving user positions."""
-        positions = self.withdrawal_tool.get_user_positions(
-            "0xf39Fd6e51aad88F6F4ce6aB8827279cffFb92266",
-            "84532"
-        )
+        # Test with an invalid address (non-hex characters)
+        invalid_address3 = "0x1234567890abcdef1234567890abcdefghjklmno"
+        self.assertFalse(self.withdrawal_tool._is_valid_eth_address(invalid_address3))
         
-        self.assertEqual(len(positions), 2)
-        self.assertEqual(positions[0]["protocol"], "Beefy")
-        self.assertEqual(positions[1]["protocol"], "UniswapV3")
-    
-    def test_get_exit_functions(self):
-        """Test retrieving exit functions for a token."""
-        exit_functions = self.withdrawal_tool.get_exit_functions_for_token("USDC-USDT-LP", "84532")
-        
-        self.assertEqual(len(exit_functions), 1)
-        self.assertEqual(exit_functions[0]["contractType"], "BeefyVault")
-        self.assertEqual(exit_functions[0]["functionName"], "withdraw")
-    
-    def test_get_protocol_contract(self):
-        """Test retrieving protocol contract addresses."""
-        address = self.withdrawal_tool.get_protocol_contract("Beefy", "beefyUSDC-USDT-Vault", "84532")
-        self.assertEqual(address, "0xDb9ADe9917F2b9F67F569112DeADe3506f2177b2")
-        
-        address = self.withdrawal_tool.get_protocol_contract("UniswapV3", "nonfungiblePositionManager", "84532")
-        self.assertEqual(address, "0x27F971cb582BF9E50F397e4d29a5C7A34f11faA2")
-    
-    def test_execute_beefy_withdrawal(self):
-        """Test executing a withdrawal from Beefy."""
-        position = {
-            "protocol": "Beefy",
-            "symbol": "USDC-USDT-LP",
-            "tokenId": "123",
-            "contractKey": "beefyUSDC-USDT-Vault"
+        # Test with a non-string value
+        invalid_address4 = 12345
+        self.assertFalse(self.withdrawal_tool._is_valid_eth_address(invalid_address4))
+
+    def test_validate_parameters(self):
+        """Test parameter validation."""
+        # Test with valid parameters
+        valid_params = {
+            "token": "USDC",
+            "destination_address": "0x1234567890abcdef1234567890abcdef12345678",
+            "amount": "100",
+            "chain_id": "84532"
         }
+        result = self.withdrawal_tool.validate_parameters(valid_params)
+        self.assertIsNone(result)
         
-        result = self.withdrawal_tool.execute_beefy_withdrawal(position, "84532")
-        
-        self.assertTrue(result["success"])
-        self.assertEqual(result["transaction_hash"], "0x1234567890abcdef")
-        
-        # Check that the action provider was called with correct parameters
-        self.mock_action_provider.execute_contract_write.assert_called_once_with(
-            chain_id="84532",
-            account="0xDefaultAccount",
-            contract_address="0xDb9ADe9917F2b9F67F569112DeADe3506f2177b2",
-            function_name="withdraw",
-            args=["123"]
-        )
-    
-    def test_execute_uniswap_withdrawal(self):
-        """Test executing a withdrawal from UniswapV3."""
-        position = {
-            "protocol": "UniswapV3",
-            "symbol": "USDC-WETH-LP",
-            "tokenId": "456",
-            "liquidity": "1000000"
+        # Test with missing token
+        missing_token = {
+            "destination_address": "0x1234567890abcdef1234567890abcdef12345678",
+            "amount": "100",
+            "chain_id": "84532"
         }
+        result = self.withdrawal_tool.validate_parameters(missing_token)
+        self.assertIn("Error: Missing token information", result)
         
-        # Mock the decrease liquidity and collect calls
-        decrease_result = MagicMock()
-        decrease_result.status = "SUCCESS"
-        decrease_result.transaction_hash = "0xdecrease"
-        decrease_result.message = "Liquidity decreased"
+        # Test with missing destination address
+        missing_dest = {
+            "token": "USDC",
+            "amount": "100",
+            "chain_id": "84532"
+        }
+        result = self.withdrawal_tool.validate_parameters(missing_dest)
+        self.assertIn("Error: Missing destination address", result)
         
-        collect_result = MagicMock()
-        collect_result.status = "SUCCESS"
-        collect_result.transaction_hash = "0xcollect"
-        collect_result.message = "Tokens collected"
+        # Test with missing amount
+        missing_amount = {
+            "token": "USDC",
+            "destination_address": "0x1234567890abcdef1234567890abcdef12345678",
+            "chain_id": "84532"
+        }
+        result = self.withdrawal_tool.validate_parameters(missing_amount)
+        self.assertIn("Error: Missing withdrawal amount", result)
         
-        self.mock_action_provider.execute_contract_write.side_effect = [
-            decrease_result,
-            collect_result
-        ]
+        # Test with invalid destination address
+        invalid_dest = {
+            "token": "USDC",
+            "destination_address": "0xinvalid",
+            "amount": "100",
+            "chain_id": "84532"
+        }
+        result = self.withdrawal_tool.validate_parameters(invalid_dest)
+        self.assertIn("Error: Invalid destination address format", result)
         
-        result = self.withdrawal_tool.execute_uniswap_withdrawal(position, "84532")
+        # Test with invalid chain ID
+        invalid_chain = {
+            "token": "USDC",
+            "destination_address": "0x1234567890abcdef1234567890abcdef12345678",
+            "amount": "100",
+            "chain_id": "invalid"
+        }
+        result = self.withdrawal_tool.validate_parameters(invalid_chain)
+        self.assertIn("Error: Invalid chain ID", result)
         
-        self.assertTrue(result["success"])
-        self.assertEqual(result["transaction_hash"], "0xcollect")
+        # Test with unknown token
+        unknown_token = {
+            "token": "UNKNOWN",
+            "destination_address": "0x1234567890abcdef1234567890abcdef12345678",
+            "amount": "100",
+            "chain_id": "84532"
+        }
+        result = self.withdrawal_tool.validate_parameters(unknown_token)
+        self.assertIn("Error: Could not resolve address for token", result)
         
-        # Check that the action provider was called with correct parameters for both steps
-        self.assertEqual(self.mock_action_provider.execute_contract_write.call_count, 2)
-        
-        # Check first call (decreaseLiquidity)
-        args, kwargs = self.mock_action_provider.execute_contract_write.call_args_list[0]
-        self.assertEqual(kwargs["chain_id"], "84532")
-        self.assertEqual(kwargs["contract_address"], "0x27F971cb582BF9E50F397e4d29a5C7A34f11faA2")
-        self.assertEqual(kwargs["function_name"], "decreaseLiquidity")
-        self.assertEqual(kwargs["args"][0], "456")  # tokenId
-        self.assertEqual(kwargs["args"][1], "1000000")  # liquidity
-        
-        # Check second call (collect)
-        args, kwargs = self.mock_action_provider.execute_contract_write.call_args_list[1]
-        self.assertEqual(kwargs["chain_id"], "84532")
-        self.assertEqual(kwargs["contract_address"], "0x27F971cb582BF9E50F397e4d29a5C7A34f11faA2")
-        self.assertEqual(kwargs["function_name"], "collect")
-        self.assertEqual(kwargs["args"][0], "456")  # tokenId
-    
-    def test_execute_withdrawal(self):
-        """Test the main execute method with multiple positions."""
-        # Reset the mock to return success for all calls
-        self.mock_action_provider.execute_contract_write.side_effect = None
-        mock_result = MagicMock()
-        mock_result.status = "SUCCESS"
-        mock_result.transaction_hash = "0xabcdef1234567890"
-        mock_result.message = "Success"
-        self.mock_action_provider.execute_contract_write.return_value = mock_result
-        
-        # Define parameters
-        parameters = {
-            "token": "USDC-USDT-LP",
-            "amount": "ALL",
-            "destination": "safe_wallet",
+        # Test with invalid token address
+        invalid_token_addr = {
+            "token_address": "0xinvalid",
+            "destination_address": "0x1234567890abcdef1234567890abcdef12345678",
+            "amount": "100",
+            "chain_id": "84532"
+        }
+        result = self.withdrawal_tool.validate_parameters(invalid_token_addr)
+        self.assertIn("Error: Invalid token address format", result)
+
+    def test_execute_success(self):
+        """Test successful withdrawal execution."""
+        # Set up test parameters
+        params = {
+            "token": "USDC",
+            "destination_address": "0x1234567890abcdef1234567890abcdef12345678",
+            "amount": "100",
             "chain_id": "84532",
-            "user_address": "0xf39Fd6e51aad88F6F4ce6aB8827279cffFb92266"
+            "exchange": "Coinbase"
         }
         
-        # Execute the withdrawal
-        result = self.withdrawal_tool.execute(parameters)
-        
-        # Check that the result contains the expected information
-        self.assertIn("Emergency withdrawal initiated", result)
-        self.assertIn("Results: 1 successful", result)
-        self.assertIn("Success", result)
-        self.assertIn("0xabcdef1234567890", result)
-    
-    def test_no_matching_positions(self):
-        """Test executing a withdrawal with no matching positions."""
-        parameters = {
-            "token": "NON_EXISTENT_TOKEN",
-            "amount": "ALL",
-            "destination": "safe_wallet",
-            "chain_id": "84532",
-            "user_address": "0xf39Fd6e51aad88F6F4ce6aB8827279cffFb92266"
-        }
-        
-        # Execute the withdrawal
-        result = self.withdrawal_tool.execute(parameters)
-        
-        # Check that the result contains the expected error message
-        self.assertIn("no matching positions found", result)
-        self.assertEqual(self.mock_action_provider.execute_contract_write.call_count, 0)
-    
-    def test_callable_interface(self):
-        """Test the callable interface of WithdrawalTool."""
-        # Mock the execute method
-        self.withdrawal_tool.execute = MagicMock(return_value="Executed successfully")
-        
-        # Call the instance directly
-        parameters = {"token": "test"}
-        result = self.withdrawal_tool(parameters)
-        
-        # Check that execute was called with the parameters
-        self.withdrawal_tool.execute.assert_called_once_with(parameters)
-        self.assertEqual(result, "Executed successfully")
-        
-    def test_simulation_mode(self):
-        """Test the tool in simulation mode when AgentKit is not available."""
-        # Create a new instance with AGENTKIT_AVAILABLE set to False
-        with patch('horus.tools.withdrawal.AGENTKIT_AVAILABLE', False):
-            withdrawal_tool = WithdrawalTool(
-                SAMPLE_DEPENDENCY_GRAPH,
-                SAMPLE_USER_BALANCES,
-                SAMPLE_PROTOCOLS
-            )
-            
-            # Execute a withdrawal that should be simulated
-            position = {
-                "protocol": "Beefy",
-                "symbol": "USDC-USDT-LP",
-                "tokenId": "123",
-                "contractKey": "beefyUSDC-USDT-Vault"
+        # Test with a successful response
+        with patch('horus.tools.agent_kit.agent_kit_manager.execute_withdrawal') as mock_execute:
+            mock_execute.return_value = {
+                "success": True,
+                "transaction_hash": "0x123456789abcdef123456789abcdef123456789abcdef123456789abcdef",
+                "message": "Withdrawal executed successfully"
             }
-            
-            result = withdrawal_tool.execute_beefy_withdrawal(position, "84532")
-            
-            # Check that we got a simulated response
-            self.assertTrue(result["success"])
-            self.assertEqual(result["transaction_hash"], "0xabcdef1234567890")
-            self.assertIn("Simulated withdrawal", result["message"])
+            result = self.withdrawal_tool.execute(params)
+        
+        # Check the result
+        self.assertIn("Successfully withdrew", result)
+        self.assertIn("100", result)
+        self.assertIn("USDC", result)
+
+    def test_execute_failure(self):
+        """Test withdrawal execution failure."""
+        # Set up test parameters
+        params = {
+            "token": "USDC",
+            "destination_address": "0x1234567890abcdef1234567890abcdef12345678_test_failure",
+            "amount": "100",
+            "chain_id": "84532",
+            "exchange": "Coinbase"
+        }
+        
+        # Test with a failure response
+        with patch('horus.tools.agent_kit.agent_kit_manager.execute_withdrawal') as mock_execute:
+            # Configure the mock to return a failure result
+            mock_execute.return_value = {
+                "success": False,
+                "transaction_hash": None,
+                "message": "API Error: Rate limit exceeded"
+            }
+            result = self.withdrawal_tool.execute(params)
+        
+        # Check the result
+        self.assertIn("Failed to execute withdrawal", result)
+        self.assertIn("API Error: Rate limit exceeded", result)
+
+    def test_execute_exception(self):
+        """Test withdrawal execution with exception."""
+        # Set up test parameters
+        params = {
+            "token": "USDC",
+            "destination_address": "0x1234567890abcdef1234567890abcdef12345678_test_exception",
+            "amount": "100",
+            "chain_id": "84532",
+            "exchange": "Coinbase"
+        }
+        
+        # Test with an exception
+        with patch('horus.tools.agent_kit.agent_kit_manager.execute_withdrawal') as mock_execute:
+            # Configure the mock to raise an exception
+            mock_execute.side_effect = Exception("Test exception")
+            result = self.withdrawal_tool.execute(params)
+        
+        # Check the result
+        self.assertIn("Failed to execute withdrawal", result)
+        self.assertIn("Test exception", result)
+
+    def test_simulation_mode(self):
+        """Test simulation mode."""
+        # Set up test parameters with simulation flag
+        params = {
+            "token": "USDC",
+            "destination_address": "0x1234567890abcdef1234567890abcdef12345678",
+            "amount": "100",
+            "chain_id": "84532",
+            "exchange": "Coinbase",
+            "simulation": True
+        }
+        
+        # Execute in simulation mode
+        result = self.withdrawal_tool.execute(params)
+        
+        # Check the result
+        self.assertIn("SIMULATION", result)
+        self.assertIn("Would withdraw", result)
+        self.assertIn("100", result)
+        self.assertIn("USDC", result)
 
 
-if __name__ == "__main__":
+if __name__ == '__main__':
     unittest.main() 

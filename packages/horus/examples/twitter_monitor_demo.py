@@ -21,10 +21,10 @@ from pathlib import Path
 sys.path.append(str(Path(__file__).parent.parent))
 
 # Import from our new modular structure
-from horus.mock.twitter_data import MockTweet, create_mock_tweets, create_mock_openai_response
-from horus.mock.openai_client import MockOpenAI
-from horus.agents.security_agent import SecurityAgent
-from horus.agents.twitter_agent import TwitterAgent
+from mock.twitter_data import MockTweet, create_mock_tweets, create_mock_openai_response
+from mock.openai_client import MockOpenAI
+from agents.security_agent import SecurityAgent
+from agents.twitter_agent import TwitterAgent
 
 def run_demo():
     """Run the Twitter monitoring demo."""

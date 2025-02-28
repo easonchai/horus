@@ -14,6 +14,7 @@ Horus is a security monitoring tool that watches for threats and can automatical
     - [Installing Poetry](#installing-poetry)
       - [Install Poetry](#install-poetry)
     - [Setting up the Project](#setting-up-the-project)
+  - [Project Structure](#project-structure)
   - [Running the Application](#running-the-application)
   - [Development Commands](#development-commands)
   - [Troubleshooting](#troubleshooting)
@@ -108,37 +109,66 @@ mise exec -- pnpm install
 
 This installs pnpm (a fast, disk space efficient package manager) and uses it to install the project's Node.js dependencies.
 
-4. Install Python dependencies via Poetry:
+4. Install Python dependencies for the Horus package:
 
 ```bash
-mise exec -- pip install poetry
+mise exec -- pnpm install:horus
 ```
 
-This sets up a virtual environment and installs all Python dependencies defined in the pyproject.toml file.
+5. Install TypeScript dependencies for the Horus Demo package (if needed):
+
+```bash
+mise exec -- pnpm install:demo
+```
+
+## Project Structure
+
+This repository is a monorepo containing multiple packages:
+
+- **horus**: The main Python-based security monitoring agent
+- **horus-demo**: A TypeScript-based demonstration package
+
+Each package has its own README with specific instructions.
 
 ## Running the Application
 
 To run the Horus security monitoring agent:
 
 ```bash
+mise exec -- pnpm dev:horus
+```
+
+To run the Horus Demo application:
+
+```bash
 mise exec -- pnpm dev
 ```
 
-This will start the development server with the correct Node.js version and environment.
+To run all packages:
+
+```bash
+mise exec -- pnpm dev:all
+```
 
 ## Development Commands
 
 Here are some useful commands for development:
 
 ```bash
-# Run tests
+# Run tests for horus-demo
 mise exec -- pnpm test
 
-# Lint code
+# Lint code for horus-demo
 mise exec -- pnpm lint
 
-# Build the application
+# Build the horus-demo package
 mise exec -- pnpm build
+
+# Run the horus package
+mise exec -- pnpm dev:horus
+
+# Run the original horus development mode
+mise exec -- pnpm dev:original
 ```
 
 ## Troubleshooting

@@ -5,12 +5,15 @@
     "packages/*"
   ],
   "scripts": {
-    "dev": "turbo run dev",
+    "dev": "turbo run dev --filter=horus-demo",
+    "dev:horus": "cd packages/horus && mise exec -- python horus/main.py --test --interval 30",
+    "dev:all": "turbo run dev",
     "dev:original": "turbo run dev:original",
-    "build": "turbo run build",
-    "lint": "turbo run lint",
-    "test": "turbo run test",
-    "install": "cd packages/horus && poetry install",
+    "build": "turbo run build --filter=horus-demo",
+    "lint": "turbo run lint --filter=horus-demo",
+    "test": "turbo run test --filter=horus-demo",
+    "install:demo": "cd packages/horus-demo && pnpm install",
+    "install:horus": "cd packages/horus && poetry install",
     "update-deps": "cd packages/horus && poetry update",
     "install-coinbase": "cd packages/horus && poetry add coinbase-agentkit@latest coinbase-agentkit-langchain@latest --allow-prereleases"
   },

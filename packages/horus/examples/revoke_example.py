@@ -12,7 +12,7 @@ import os
 import logging
 from dotenv import load_dotenv
 
-from horus.agents.security_agent import SecurityAgent
+from agents.security_agent import SecurityAgent
 from openai import OpenAI
 
 # Configure logging

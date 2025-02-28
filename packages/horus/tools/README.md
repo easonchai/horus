@@ -57,20 +57,54 @@ result = revoke_tool({
 
 ### Monitor Tool
 
-The monitor tool is used to enhance monitoring of assets during suspicious activity.
+The monitor tool is used to enhance monitoring of assets during suspicious activity. It allows for configuring alert thresholds, monitoring durations, and tracking active monitoring configurations.
 
 ```python
 from horus.tools import create_monitor_tool
 
-# Create a monitor tool
-monitor_tool = create_monitor_tool()
+# Create a monitor tool with optional alert subscribers
+subscribers = ["0x1234...", "alert@example.com"]
+monitor_tool = create_monitor_tool(subscribers)
 
 # Use the tool
-result = monitor_tool({
+result = monitor_tool.execute({
     "asset": "All Base Chain Positions",
     "duration": "48h",
-    "threshold": "5%"
+    "threshold": "5%",
+    "chain_id": "84532",
+    "alert_type": "price",
+    "notify": ["additional@example.com"]
 })
+
+# The tool can also be called directly
+result = monitor_tool({
+    "asset": "ETH",
+    "duration": "24h",
+    "threshold": "3%"
+})
+
+# Get all active monitoring configurations
+active_monitors = monitor_tool.get_active_monitors()
+
+# Filter monitors by chain
+base_monitors = monitor_tool.get_active_monitors("84532")
+```
+
+#### Advanced Features
+
+The MonitorTool class provides methods for managing subscribers and monitoring configurations:
+
+```python
+# Add a subscriber
+monitor_tool.add_subscriber("new_alert@example.com")
+
+# Remove a subscriber
+monitor_tool.remove_subscriber("old_alert@example.com")
+
+# Check active monitoring configurations
+active_eth_monitor = monitor_tool.active_monitors.get("ETH:84532")
+if active_eth_monitor:
+    print(f"ETH monitoring active until {active_eth_monitor['duration']}")
 ```
 
 ## Creating Custom Tools

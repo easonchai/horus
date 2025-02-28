@@ -44,8 +44,7 @@
       "name": "UniswapV3",
       "chains": {
         "84532": {
-          "nonfungiblePositionManager": "0x27F971cb582BF9E50F397e4d29a5C7A34f11faA2",
-          "swapRouter02": "0x94cC0AaC535CCDB3C01d6787D6413C739ae12bc4"
+          "nonfungiblePositionManager": "0x27F971cb582BF9E50F397e4d29a5C7A34f11faA2"
         }
       },
       "abis": {

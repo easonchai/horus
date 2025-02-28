@@ -21,4 +21,10 @@ DEFAULT_BLOCK_EXPLORERS = {
 DEFAULT_SLIPPAGE = 0.5  # 0.5%
 
 # Default fee tier for Uniswap V3 (0.3%)
-DEFAULT_FEE_TIER = 3000 
+DEFAULT_FEE_TIER = 3000
+
+# CoinGecko API base URL for price data
+COINGECKO_BASE_URL = "https://api.coingecko.com/api/v3"
+
+# Valid swap sources
+VALID_SWAP_SOURCES = ["UniswapV3", "SushiSwap", "Curve", "Balancer", "PancakeSwap"] 
