@@ -1,12 +1,13 @@
+// Signal types
 export type SignalSource = 'twitter' | 'discord' | 'other';
 
 export interface Signal {
-  id: string;
   source: SignalSource;
   content: string;
   timestamp: number;
 }
 
+// Threat types
 export type SeverityLevel = 'low' | 'medium' | 'high' | 'critical';
 
 export interface Threat {
@@ -17,11 +18,12 @@ export interface Threat {
   severity: SeverityLevel;
 }
 
+// Action types
 export type ActionType = 'swap' | 'withdraw' | 'revoke';
 
 export interface Action {
   type: ActionType;
   protocol: string;
   token: string;
-  params: Record<string, unknown>;
+  params: Record<string, any>;
 }

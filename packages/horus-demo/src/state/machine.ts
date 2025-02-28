@@ -58,47 +58,72 @@ export const horusMachine = setup({
       },
     },
     evaluating: {
-      // We'll add the service later
-      on: {
-        THREAT_DETECTED: {
-          target: 'processing',
-          actions: 'assignThreat',
-        },
-        NO_THREAT_DETECTED: {
-          target: 'idle',
-          actions: 'clearCurrentSignal',
-        },
-        ERROR: {
+      invoke: {
+        src: 'evaluateSignals',
+        onDone: [
+          {
+            target: 'processing',
+            guard: ({ event }) => event.output.isThreat,
+            actions: assign({
+              detectedThreat: ({ event }) => event.output.threat,
+            }),
+          },
+          {
+            target: 'idle',
+            guard: ({ event }) => !event.output.isThreat,
+            actions: 'clearCurrentSignal',
+          },
+        ],
+        onError: {
           target: 'failed',
           actions: 'assignError',
-        }
-      }
+        },
+      },
     },
     processing: {
-      // We'll add the service later
-      on: {
-        ACTIONS_CREATED: {
-          target: 'executing',
-          actions: 'assignActions',
+      invoke: {
+        src: 'processThreats',
+        onDone: {
+          target: 'composing',
+          actions: assign({
+            detectedThreat: ({ event }) => event.output,
+          }),
         },
-        ERROR: {
+        onError: {
           target: 'failed',
           actions: 'assignError',
-        }
-      }
+        },
+      },
+    },
+    composing: {
+      invoke: {
+        src: 'composeActions',
+        onDone: {
+          target: 'executing',
+          actions: assign({
+            actionPlan: ({ event }) => event.output,
+          }),
+        },
+        onError: {
+          target: 'failed',
+          actions: 'assignError',
+        },
+      },
     },
     executing: {
-      // We'll add the service later
-      on: {
-        EXECUTION_COMPLETED: {
+      invoke: {
+        src: 'executeActions',
+        onDone: {
           target: 'completed',
-          actions: 'assignResults',
+          actions: assign({
+            executionResults: ({ event }) => event.output,
+          }),
         },
-        ERROR: {
+        onError: {
           target: 'failed',
           actions: 'assignError',
-        }
-      }
+        },
+      },
     },
     completed: {
       after: {
