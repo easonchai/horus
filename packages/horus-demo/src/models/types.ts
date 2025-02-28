@@ -1,5 +1,5 @@
 // Signal types
-export type SignalSource = 'twitter' | 'discord' | 'other';
+export type SignalSource = "twitter" | "discord" | "other";
 
 export interface Signal {
   source: SignalSource;
@@ -8,7 +8,7 @@ export interface Signal {
 }
 
 // Threat types
-export type SeverityLevel = 'low' | 'medium' | 'high' | 'critical';
+export type SeverityLevel = "low" | "medium" | "high" | "critical";
 
 export interface Threat {
   description: string;
@@ -18,12 +18,19 @@ export interface Threat {
   severity: SeverityLevel;
 }
 
+// Signal evaluation results
+export interface SignalEvaluationResult {
+  isThreat: boolean;
+  threat?: Threat;
+  error?: Error;
+}
+
 // Action types
-export type ActionType = 'swap' | 'withdraw' | 'revoke';
+export type ActionType = "swap" | "withdraw" | "revoke";
 
 export interface Action {
   type: ActionType;
   protocol: string;
   token: string;
-  params: Record<string, any>;
+  params: Record<string, string | number | boolean>;
 }

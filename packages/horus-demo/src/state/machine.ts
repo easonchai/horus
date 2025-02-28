@@ -73,12 +73,17 @@ export const horusMachine = setup({
     isThreat: ({ event }) => {
       console.log("isThreat guard check with event:", event);
       // @ts-expect-error - Actor events in onDone have 'output' property
-      return Boolean(event.output?.isThreat);
+      return Boolean(event.output?.isThreat) && Boolean(event.output?.threat);
     },
     isNotThreat: ({ event }) => {
       console.log("isNotThreat guard check with event:", event);
       // @ts-expect-error - Actor events in onDone have 'output' property
       return event.output?.isThreat === false;
+    },
+    hasError: ({ event }) => {
+      console.log("hasError guard check with event:", event);
+      // @ts-expect-error - Actor events in onDone have 'output' property
+      return Boolean(event.output?.error);
     },
   },
   actors: {
@@ -112,6 +117,19 @@ export const horusMachine = setup({
               detectedThreat: ({ event }) => {
                 console.log("Assigning detected threat:", event.output.threat);
                 return event.output.threat;
+              },
+            }),
+          },
+          {
+            target: "failed",
+            guard: { type: "hasError" },
+            actions: assign({
+              error: ({ event }) => {
+                console.error(
+                  "Signal evaluation failed with error:",
+                  event.output.error
+                );
+                return event.output.error;
               },
             }),
           },
