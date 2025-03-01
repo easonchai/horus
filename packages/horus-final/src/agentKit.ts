@@ -109,8 +109,8 @@ export async function getAgent(): Promise<AgentKit> {
     actionProviders: [
       swapProvider(),
       revokeProvider(), // Add the new RevokeProvider
-      // beefyWithdrawalProvider(), // Add the new WithdrawalProvider
-      // uniswapWithdrawalProvider(),
+      beefyWithdrawalProvider(), // Add the new WithdrawalProvider
+      uniswapWithdrawalProvider(),
     ],
   });
 
