@@ -75,6 +75,8 @@ import { revokeProvider } from "./action-providers/revoke-provider";
 import { swapProvider } from "./action-providers/swap-provider";
 import { withdrawalProvider } from "./action-providers/withdrawal-provider";
 import { Wallet } from "./wallet";
+import { beefyWithdrawalProvider } from "./action-providers/beefy-withdrawal-provider";
+import { uniswapWithdrawalProvider } from "./action-providers/uniswap-withdrawal-provider";
 
 // Cache the AgentKit instance
 let cachedAgentKit: AgentKit | null = null;
@@ -107,7 +109,8 @@ export async function getAgent(): Promise<AgentKit> {
     actionProviders: [
       swapProvider(),
       revokeProvider(), // Add the new RevokeProvider
-      // withdrawalProvider(), // Add the new WithdrawalProvider
+      // beefyWithdrawalProvider(), // Add the new WithdrawalProvider
+      uniswapWithdrawalProvider(),
     ],
   });
 

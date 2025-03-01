@@ -1,7 +1,7 @@
 [
   {
     "id": "tweet1",
-    "content": "ALERT: Critical vulnerability found in Uniswap V3 contract. ONLY REVOKE USDC APPROVALS TO UNISWAP ROUTER",
+    "content": "ALERT: Critical vulnerability found in Uniswap V3 contract. All funds at risk of being drained.",
     "timestamp": 1677513600000
   },
   {

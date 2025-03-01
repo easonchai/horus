@@ -98,6 +98,12 @@ export class Agent {
       ## PROTOCOLS
       ${JSON.stringify(protocolsData, null, 2)}
 
+      ## Uniswap position tokenIDs
+      USDC-USDT Position TokenId: 14366
+      WBTC-EIGEN Position TokenId: 14367
+      USDC-EIGEN Position TokenId: 14368
+      Liquidity for all positions is 10000000000. amount0Min & amount1Min are both 0.
+
       ## YOUR TASK
       1. Analyze this signal to determine if it represents a legitimate security threat to any protocols or tokens in the dependency graph
       2. If a threat is detected:
@@ -105,6 +111,9 @@ export class Agent {
         - Determine which positions in the dependency graph are exposed to this threat
         - Outline the exact sequence of actions needed to protect these positions
         - Execute the necessary tool calls (swap/revoke/withdraw) in the correct order
+        - IGNORE ALL BEEFY FOR NOW. ONLY WORKS FOR UNISWAP. 
+        - If a uniswap vulnerability is found, ignore beefy and start exiting uniswap.
+        - For uniswap, SKIP COLLECT STEP. ONLY EXECUTE DECREASE LIQUIDITY
       3. If no threat is detected or if no exposure exists in the dependency graph:
         - Explain why no action is needed
         - Take no further action

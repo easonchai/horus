@@ -89,7 +89,7 @@ const ERC20_ABI = [
  * Zod schema for token approval revocation
  */
 const revokeSchema = z.object({
-  tokenSymbol: z.enum(["USDC", "USDT", "WETH", "EIGEN"]),
+  tokenSymbol: z.enum(["USDC", "USDT", "WBTC", "EIGEN"]),
   spenderAddress: z
     .string()
     .regex(/^0x[a-fA-F0-9]{40}$/, "Invalid Ethereum address"),

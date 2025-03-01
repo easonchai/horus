@@ -6,13 +6,16 @@ import {
   WalletProvider,
 } from "@coinbase/agentkit";
 import "reflect-metadata";
-import { Address, parseAbi } from "viem";
+import { parseAbi } from "viem";
 import { z } from "zod";
 import { getLogger } from "../utils/logger";
-import { Wallet } from "../wallet";
+import { baseSepolia } from "viem/chains";
+import protocols from "../data/protocols.json";
 
 // Initialize logger for this component
 const logger = getLogger("WithdrawalProvider");
+
+const MAX_UINT128 = BigInt("0xFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFF"); // 2^128 - 1
 
 /**
  * Zod schema for universal contract withdrawal validation
@@ -61,15 +64,67 @@ const universalWithdrawSchema = z.object({
       "Optional function signature if ABI is not provided (e.g., 'withdraw(uint256)')"
     ),
   abi: z
-    .array(z.any())
+    .array(
+      z.object({
+        name: z.string().optional(),
+        type: z.string().optional(),
+        inputs: z
+          .array(
+            z.object({
+              name: z.string().optional(),
+              type: z.string(),
+              indexed: z.boolean().optional(),
+              components: z
+                .array(
+                  z.object({
+                    name: z.string().optional(),
+                    type: z.string(),
+                  })
+                )
+                .optional(),
+            })
+          )
+          .optional(),
+        outputs: z
+          .array(
+            z.object({
+              name: z.string().optional(),
+              type: z.string(),
+              components: z
+                .array(
+                  z.object({
+                    name: z.string().optional(),
+                    type: z.string(),
+                  })
+                )
+                .optional(),
+            })
+          )
+          .optional(),
+        stateMutability: z.string().optional(),
+        anonymous: z.boolean().optional(),
+        constant: z.boolean().optional(),
+      })
+    )
     .optional()
     .describe(
       "Contract ABI for the function being called (alternative to functionSignature)"
     ),
 
-  // Function arguments
+  // Function arguments - Simplified schema to avoid nested array issues
   args: z
-    .array(z.any())
+    .array(
+      z.union([
+        z.string(),
+        z.number(),
+        z.boolean(),
+        z.bigint(),
+        z.null(),
+        // Remove nested array type and complex objects
+        // Just handle primitive types that are commonly used in contract calls
+        z.object({}).passthrough(), // Allow any object structure
+      ])
+    )
     .default([])
     .describe("Arguments to pass to the contract function"),
 
@@ -175,6 +230,64 @@ const universalWithdrawSchema = z.object({
 });
 
 /**
+ * Helper function to get the correct ABI based on protocol and function
+ */
+const getProtocolABI = (protocolName: string, contractType: string) => {
+  const protocol = protocols.protocols.find((p) => p.name === protocolName);
+  if (!protocol) {
+    throw new Error(`Protocol ${protocolName} not found in configuration`);
+  }
+
+  const abi = (protocol as any).abis?.[contractType] as any;
+  if (!abi) {
+    throw new Error(
+      `ABI for ${contractType} not found in ${protocolName} configuration`
+    );
+  }
+
+  return abi;
+};
+
+/**
+ * Helper function to validate if an address belongs to a protocol
+ */
+const isValidProtocolContract = (
+  protocol: string,
+  address: string
+): boolean => {
+  const protocolData = protocols.protocols.find(
+    (p) => p.name.toLowerCase() === protocol.toLowerCase()
+  );
+
+  if (!protocolData?.chains?.["84532"]) {
+    logger.error(`No contracts found for protocol ${protocol} on chain 84532`);
+    return false;
+  }
+
+  const validAddresses = Object.values(protocolData.chains["84532"]);
+  const isValid = validAddresses.includes(address);
+
+  if (!isValid) {
+    logger.error(
+      `Address ${address} is not a valid contract for protocol ${protocol}. Valid addresses: ${validAddresses.join(
+        ", "
+      )}`
+    );
+  }
+
+  return isValid;
+};
+
+/**
+ * Helper function to normalize protocol name
+ */
+const normalizeProtocolName = (protocol: string): string => {
+  if (protocol.toLowerCase() === "uniswap") return "UniswapV3";
+  if (protocol.toLowerCase() === "beefy") return "Beefy";
+  return protocol;
+};
+
+/**
  * WithdrawalProvider - A generic action provider for withdrawing assets from any contract
  *
  * This provider allows users to withdraw their funds from any contract without
@@ -210,7 +323,7 @@ export class WithdrawalProvider extends ActionProvider<WalletProvider> {
   ): Promise<string> {
     const {
       contractAddress,
-      protocol,
+      protocol: rawProtocol,
       protocolAction,
       protocolParams,
       chainId,
@@ -237,8 +350,18 @@ export class WithdrawalProvider extends ActionProvider<WalletProvider> {
       metadata,
     } = args;
 
+    // Normalize protocol name
+    const protocol = normalizeProtocolName(rawProtocol);
+
+    // Validate contract address belongs to protocol
+    if (!isValidProtocolContract(protocol, contractAddress)) {
+      return `Error: Contract address ${contractAddress} is not a valid contract for protocol ${protocol}`;
+    }
+
     logger.info(
-      `Executing withdrawal for protocol: ${protocol}, contract: ${contractAddress}, function: ${functionName}`
+      `Executing withdrawal for protocol: ${protocol}, contract: ${contractAddress}, function: ${
+        protocolAction || functionName
+      }`
     );
 
     // Log protocol-specific parameters if provided
@@ -262,21 +385,79 @@ export class WithdrawalProvider extends ActionProvider<WalletProvider> {
 
     try {
       // Get wallet address from wallet provider
-      const walletAddress = await walletProvider.getAddress();
-      logger.info(`User wallet address: ${walletAddress}`);
+      const userAddress = await walletProvider.getAddress();
+      logger.info(`User wallet address: ${userAddress}`);
 
       // Process args and function name
       let processedArgs = [...functionArgs];
       let processedFunctionName = protocolAction || functionName;
 
-      // Apply generic argument handling
-      if (
-        tokenId &&
-        processedArgs.length === 0 &&
-        processedFunctionName.toLowerCase().includes("withdraw")
-      ) {
-        logger.debug("Adding tokenId as the first argument for withdrawal");
-        processedArgs = [tokenId];
+      // Special handling for Uniswap V3 NonfungiblePositionManager functions
+      if (protocol === "UniswapV3") {
+        // Validate contract is NonfungiblePositionManager
+        const nftManager = protocols.protocols.find(
+          (p) => p.name === "UniswapV3"
+        )?.chains?.["84532"]?.nonfungiblePositionManager;
+
+        if (contractAddress !== nftManager) {
+          throw new Error(
+            `Invalid contract address for UniswapV3 NonfungiblePositionManager. Expected ${nftManager}, got ${contractAddress}`
+          );
+        }
+
+        logger.info(
+          `Validated UniswapV3 NFT Manager contract: ${contractAddress}`
+        );
+
+        if (protocolAction === "decreaseLiquidity") {
+          logger.info("Processing decreaseLiquidity params for UniswapV3");
+          processedArgs = [
+            {
+              tokenId: BigInt(tokenId || 0),
+              liquidity: BigInt(protocolParams?.liquidity || 0),
+              amount0Min: BigInt(protocolParams?.amount0Min || 0),
+              amount1Min: BigInt(protocolParams?.amount1Min || 0),
+              deadline: BigInt(
+                protocolParams?.deadline || Math.floor(Date.now() / 1000) + 1800
+              ),
+            },
+          ];
+          logger.debug(
+            `decreaseLiquidity params: ${JSON.stringify(processedArgs)}`
+          );
+        } else if (protocolAction === "collect") {
+          logger.info("Processing collect params for UniswapV3");
+          processedArgs = [
+            {
+              tokenId: BigInt(tokenId || 0),
+              recipient: userAddress as `0x${string}`,
+              amount0Max: BigInt(protocolParams?.amount0Max || MAX_UINT128),
+              amount1Max: BigInt(protocolParams?.amount1Max || MAX_UINT128),
+            },
+          ];
+          logger.debug(`collect params: ${JSON.stringify(processedArgs)}`);
+        }
+      } else if (protocol === "Beefy" && protocolAction === "withdraw") {
+        // Validate contract is a Beefy vault
+        const beefyVaults = Object.values(
+          protocols.protocols.find((p) => p.name === "Beefy")?.chains?.[
+            "84532"
+          ] || {}
+        );
+
+        if (!beefyVaults.includes(contractAddress)) {
+          throw new Error(
+            `Invalid contract address for Beefy vault. Valid vaults: ${beefyVaults.join(
+              ", "
+            )}`
+          );
+        }
+
+        logger.info(`Validated Beefy vault contract: ${contractAddress}`);
+
+        // Simple tokenId argument for Beefy
+        processedArgs = [BigInt(tokenId || 0)];
+        logger.debug(`Beefy withdraw params: tokenId=${tokenId}`);
       }
 
       // Process any numbers in protocol params
@@ -302,58 +483,54 @@ export class WithdrawalProvider extends ActionProvider<WalletProvider> {
         }
       }
 
-      // Get the appropriate ABI
+      // Determine the correct ABI to use
       let contractAbi;
       if (abi) {
         contractAbi = abi;
         logger.debug("Using provided ABI");
+      } else if (protocol === "UniswapV3") {
+        if (
+          protocolAction === "decreaseLiquidity" ||
+          protocolAction === "collect"
+        ) {
+          contractAbi = getProtocolABI(
+            "UniswapV3",
+            "NonfungiblePositionManager"
+          );
+          logger.info("Using UniswapV3 NonfungiblePositionManager ABI");
+        }
+      } else if (protocol === "Beefy") {
+        if (protocolAction === "withdraw") {
+          contractAbi = getProtocolABI("Beefy", "BeefyVault");
+          logger.info("Using Beefy vault ABI");
+        }
       } else if (functionSignature) {
         logger.debug(`Using function signature: ${functionSignature}`);
         contractAbi = parseAbi([functionSignature]);
       } else {
-        logger.warn(
-          "No ABI or function signature provided, attempting a minimal ABI for the function"
+        throw new Error(
+          "No ABI, protocol-specific ABI, or function signature provided"
         );
-        // Create a minimal ABI based on function name and args
-        const argTypes = processedArgs
-          .map((arg) => {
-            if (
-              typeof arg === "string" &&
-              arg.startsWith("0x") &&
-              arg.length === 42
-            )
-              return "address";
-            if (
-              typeof arg === "bigint" ||
-              (typeof arg === "number" && Number.isInteger(arg))
-            )
-              return "uint256";
-            if (typeof arg === "boolean") return "bool";
-            return "bytes"; // Default to bytes for unknown types
-          })
-          .join(",");
-
-        const minimalSignature = `function ${processedFunctionName}(${argTypes})`;
-        logger.debug(
-          `Generated minimal function signature: ${minimalSignature}`
-        );
-
-        try {
-          contractAbi = parseAbi([minimalSignature]);
-        } catch (error) {
-          logger.error(
-            "Failed to create minimal ABI, requiring explicit ABI or signature"
-          );
-          return "Error: Either ABI or function signature must be provided. Could not generate a minimal ABI.";
-        }
       }
+
+      // Log the final contract call details
+      logger.info(`
+        Final contract call details:
+        Protocol: ${protocol}
+        Contract: ${contractAddress}
+        Function: ${processedFunctionName}
+        Args: ${JSON.stringify(processedArgs, (_, v) =>
+          typeof v === "bigint" ? v.toString() : v
+        )}
+      `);
 
       // Build transaction parameters for Viem
       const txParams: any = {
-        address: contractAddress as Address,
+        address: contractAddress as `0x${string}`,
         abi: contractAbi,
         functionName: processedFunctionName,
         args: processedArgs,
+        chain: baseSepolia,
       };
 
       // Add optional transaction parameters if provided
@@ -397,27 +574,44 @@ export class WithdrawalProvider extends ActionProvider<WalletProvider> {
 
       // REAL IMPLEMENTATION WITH VIEM
       logger.info("Creating Wallet instance from wallet utility");
+      const { Wallet } = await import("../wallet");
       const wallet = new Wallet();
-      const publicClient = wallet.getPublicClient();
-      const walletClient = wallet.getWalletClient();
+
+      // Make sure wallet is initialized
+      wallet.initialize();
+
+      const publicClient = wallet.publicClient;
+      const walletClient = wallet.walletClient;
 
       if (!walletClient || !publicClient) {
         throw new Error("Failed to get wallet client or public client");
       }
 
+      // Get the transaction count for nonce
+      const transactionCount = await publicClient.getTransactionCount({
+        address: userAddress as `0x${string}`,
+      });
+
+      // Add chain and nonce to transaction parameters
+      txParams.nonce = transactionCount;
+
       logger.info("Executing contract write call");
-      const hash = await publicClient.writeContract(txParams);
+      const hash = await walletClient.writeContract(txParams as any);
       logger.info(`Transaction submitted with hash: ${hash}`);
 
       let receipt = null;
       // If confirmation is requested, wait for it
       if (waitForConfirmation) {
-        logger.info(`Waiting for ${confirmations} confirmation(s)...`);
+        logger.info(`Waiting for ${confirmations || 1} confirmation(s)...`);
         receipt = await publicClient.waitForTransactionReceipt({
           hash,
-          confirmations,
+          confirmations: confirmations || 1,
         });
         logger.info(`Transaction confirmed in block ${receipt.blockNumber}`);
+
+        if (receipt.status !== "success") {
+          throw new Error("Transaction failed");
+        }
       }
 
       // If a callback URL is provided, notify of completion
@@ -522,7 +716,7 @@ export class WithdrawalProvider extends ActionProvider<WalletProvider> {
       ## Contract Details
       * Contract Address: ${contractAddress}
       * Function: ${processedFunctionName}
-      * Wallet Address: ${walletAddress}
+      * Wallet Address: ${userAddress}
       ${tokenId ? `* Token ID: ${tokenId}` : ""}
       ${percentage !== 100 ? `* Withdrawal Percentage: ${percentage}%` : ""}
       ${value ? `* Value Sent: ${value} wei` : ""}

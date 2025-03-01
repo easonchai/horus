@@ -1,0 +1,30 @@
+{
+  "positions": {
+    "uniswap_v3": {
+      "14366": {
+        "type": "USDC-USDT",
+        "vault": "0x5ef6F539e37b25c02F843a2b4cC2C42fAbFDE3d2",
+        "tokenId": 14366,
+        "token0": "0x2e5d4604aefC3a8d09b75003fD4d7dC3a14dcB08",
+        "token1": "0x32FA886487076e066ED448b4B7c92a0cC898B90d",
+        "fee": 500
+      },
+      "14367": {
+        "type": "WBTC-EIGEN",
+        "vault": "0xF0Cd8a397508aE5B8B1caba3598E7039e23E5CE3",
+        "tokenId": 14367,
+        "token0": "0xC1CA87a66006d936F6838F6552899dc4186C0e80",
+        "token1": "0x54426a3Ee0db56D4ec286eD715970B9846341025",
+        "fee": 500
+      },
+      "14368": {
+        "type": "USDC-EIGEN",
+        "vault": "0xeA8380F62be6ce2E0A0237add0b07c3582FF2e95",
+        "tokenId": 14368,
+        "token0": "0x2e5d4604aefC3a8d09b75003fD4d7dC3a14dcB08",
+        "token1": "0x54426a3Ee0db56D4ec286eD715970B9846341025",
+        "fee": 500
+      }
+    }
+  }
+}
