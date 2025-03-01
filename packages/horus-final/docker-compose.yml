@@ -1,0 +1,11 @@
+version: "3"
+services:
+  horus:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: horus-final
+    volumes:
+      - ./src:/app/src
+    ports:
+      - "3001:3000"

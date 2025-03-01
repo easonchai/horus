@@ -1,0 +1,16 @@
+{
+  "name": "horus-final",
+  "version": "1.0.0",
+  "description": "Horus DeFi Protection System",
+  "main": "dist/index.js",
+  "scripts": {
+    "build": "tsc",
+    "start": "node dist/index.js",
+    "dev": "ts-node src/index.ts"
+  },
+  "devDependencies": {
+    "@types/node": "^20.10.0",
+    "ts-node": "^10.9.1",
+    "typescript": "^5.2.2"
+  }
+}
