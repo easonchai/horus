@@ -6,10 +6,10 @@ import {
   WalletProvider,
 } from "@coinbase/agentkit";
 import "reflect-metadata";
-import { Address, parseAbi } from "viem";
 import { z } from "zod";
 import tokens from "../data/tokens.json";
 import { getLogger } from "../utils/logger";
+import { baseSepolia } from "viem/chains";
 
 // Initialize logger for this component
 const logger = getLogger("RevokeProvider");
@@ -29,7 +29,7 @@ interface TokenConfig {
  * Represents essential information about a token
  */
 interface TokenInfo {
-  address: Address;
+  address: string;
   decimals: number;
 }
 
@@ -47,7 +47,7 @@ const getTokenInfo = (symbol: string): TokenInfo => {
     throw new Error(`Token ${symbol} not found`);
   }
   return {
-    address: token.networks["84532"] as Address,
+    address: token.networks["84532"],
     decimals: token.decimals,
   };
 };
@@ -55,17 +55,41 @@ const getTokenInfo = (symbol: string): TokenInfo => {
 /**
  * ABI for ERC20 token approval functions
  */
-const ERC20_ABI = parseAbi([
-  "function balanceOf(address account) view returns (uint256)",
-  "function approve(address spender, uint256 amount) returns (bool)",
-  "function allowance(address owner, address spender) view returns (uint256)",
-]);
+const ERC20_ABI = [
+  {
+    name: "balanceOf",
+    type: "function",
+    stateMutability: "view",
+    inputs: [{ name: "account", type: "address" }],
+    outputs: [{ type: "uint256" }],
+  },
+  {
+    name: "approve",
+    type: "function",
+    stateMutability: "nonpayable",
+    inputs: [
+      { name: "spender", type: "address" },
+      { name: "amount", type: "uint256" },
+    ],
+    outputs: [{ type: "bool" }],
+  },
+  {
+    name: "allowance",
+    type: "function",
+    stateMutability: "view",
+    inputs: [
+      { name: "owner", type: "address" },
+      { name: "spender", type: "address" },
+    ],
+    outputs: [{ type: "uint256" }],
+  },
+];
 
 /**
  * Zod schema for token approval revocation
  */
 const revokeSchema = z.object({
-  tokenSymbol: z.enum(["USDC", "USDT", "WETH", "WBTC"]),
+  tokenSymbol: z.enum(["USDC", "USDT", "WETH", "EIGEN"]),
   spenderAddress: z
     .string()
     .regex(/^0x[a-fA-F0-9]{40}$/, "Invalid Ethereum address"),
@@ -75,7 +99,7 @@ const revokeSchema = z.object({
  * Zod schema for checking token approvals
  */
 const checkApprovalsSchema = z.object({
-  tokenSymbol: z.enum(["USDC", "USDT", "WETH", "WBTC"]),
+  tokenSymbol: z.enum(["USDC", "USDT", "WETH", "EIGEN"]),
 });
 
 /**
@@ -121,8 +145,8 @@ export class RevokeProvider extends ActionProvider<WalletProvider> {
 
     try {
       // Get wallet address from wallet provider
-      const walletAddress = await walletProvider.getAddress();
-      logger.info(`User wallet address: ${walletAddress}`);
+      const userAddress = await walletProvider.getAddress();
+      logger.info(`User wallet address: ${userAddress}`);
 
       // Get token info
       const tokenInfo = getTokenInfo(tokenSymbol);
@@ -130,7 +154,57 @@ export class RevokeProvider extends ActionProvider<WalletProvider> {
         `Token address: ${tokenInfo.address}, decimals: ${tokenInfo.decimals}`
       );
 
-      logger.info(`Revocation simulation completed successfully`);
+      // Import the wallet
+      const { Wallet } = await import("../wallet");
+      const wallet = new Wallet();
+
+      // Make sure wallet is initialized
+      wallet.initialize();
+
+      const publicClient = wallet.publicClient;
+      const walletClient = wallet.walletClient;
+
+      if (!walletClient || !publicClient) {
+        throw new Error("Wallet client not initialized");
+      }
+
+      // Get the current allowance
+      const allowance = await publicClient.readContract({
+        address: tokenInfo.address as `0x${string}`,
+        abi: ERC20_ABI,
+        functionName: "allowance",
+        args: [userAddress as `0x${string}`, spenderAddress as `0x${string}`],
+      });
+
+      logger.info(`Current allowance: ${allowance}`);
+
+      // Get the transaction count for nonce
+      const transactionCount = await publicClient.getTransactionCount({
+        address: userAddress as `0x${string}`,
+      });
+
+      // Set approval to zero to revoke
+      const revokeTxHash = await walletClient.writeContract({
+        address: tokenInfo.address as `0x${string}`,
+        abi: ERC20_ABI,
+        functionName: "approve",
+        args: [spenderAddress as `0x${string}`, BigInt(0)],
+        chain: baseSepolia,
+        nonce: transactionCount,
+      } as any);
+
+      logger.info(`Revocation transaction hash: ${revokeTxHash}`);
+
+      // Wait for transaction to be mined
+      const revokeReceipt = await publicClient.waitForTransactionReceipt({
+        hash: revokeTxHash,
+      });
+
+      logger.info(`Revocation transaction confirmed: ${revokeReceipt.status}`);
+
+      if (revokeReceipt.status !== "success") {
+        throw new Error("Revocation transaction failed");
+      }
 
       // Return a formatted response
       return `
@@ -140,21 +214,18 @@ export class RevokeProvider extends ActionProvider<WalletProvider> {
       * Token: ${tokenSymbol}
       * Spender Contract: ${spenderAddress}
       * Token Address: ${tokenInfo.address}
-      * Wallet Address: ${walletAddress}
-      * Status: Simulated
+      * Wallet Address: ${userAddress}
+      * Status: 🟢 Success
+      
+      ## Transaction Information
+      * Revocation TX: [${revokeTxHash}](https://sepolia.basescan.org/tx/${revokeTxHash})
+      * Previous Allowance: ${allowance.toString()}
+      * New Allowance: 0
       
       ## Security Notes
-      This revocation would set the allowance to zero, effectively removing 
-      the contract's permission to spend your tokens. In a real implementation, 
-      this would:
-      
-      1. Check current allowance
-      2. Call the token's approve() function with value 0
-      3. Verify transaction success
-      
-      ## Why Revoke?
-      Revoking permissions helps protect your assets from potential exploits 
-      by removing access rights from protocols you no longer use.
+      You have successfully revoked permission for this contract to spend your tokens.
+      This helps protect your assets from potential exploits by removing access rights
+      from protocols you no longer use.
       `;
     } catch (error) {
       logger.error("Error revoking approval:", error);
@@ -187,40 +258,95 @@ export class RevokeProvider extends ActionProvider<WalletProvider> {
 
     try {
       // Get wallet address from wallet provider
-      const walletAddress = await walletProvider.getAddress();
-      logger.info(`User wallet address: ${walletAddress}`);
+      const userAddress = await walletProvider.getAddress();
+      logger.info(`User wallet address: ${userAddress}`);
 
       // Get token info for logging
       const tokenInfo = getTokenInfo(tokenSymbol);
       logger.debug(`Token address: ${tokenInfo.address}`);
 
-      // Mock implementation - In a real scenario, you would query the blockchain
-      // for all approval events for this token and user
-      logger.debug("Using mock approvals data for demonstration");
-      const mockApprovals = [
+      // Import the wallet
+      const { Wallet } = await import("../wallet");
+      const wallet = new Wallet();
+
+      // Make sure wallet is initialized
+      wallet.initialize();
+
+      const publicClient = wallet.publicClient;
+
+      if (!publicClient) {
+        throw new Error("Public client not initialized");
+      }
+
+      // Known contract addresses to check for approvals
+      // In a real implementation, you would query events to find all approvals
+      const knownContracts = [
         {
-          spender: "0x1234...5678",
+          address: "0x94cC0AaC535CCDB3C01d6787D6413C739ae12bc4", // Uniswap Router
           name: "Uniswap Router",
-          amount: "Unlimited",
         },
-        { spender: "0x5678...9012", name: "Beefy Vault", amount: "100.0" },
+        {
+          address: "0x4200000000000000000000000000000000000006", // WETH
+          name: "WETH Contract",
+        },
       ];
 
+      // Check approvals for each known contract
+      const approvals = await Promise.all(
+        knownContracts.map(async (contract) => {
+          try {
+            const allowance = await publicClient.readContract({
+              address: tokenInfo.address as `0x${string}`,
+              abi: ERC20_ABI,
+              functionName: "allowance",
+              args: [
+                userAddress as `0x${string}`,
+                contract.address as `0x${string}`,
+              ],
+            });
+
+            return {
+              spender: contract.address,
+              name: contract.name,
+              amount: allowance.toString(),
+              hasApproval: allowance > BigInt(0),
+            };
+          } catch (error) {
+            logger.error(
+              `Error checking allowance for ${contract.name}:`,
+              error
+            );
+            return {
+              spender: contract.address,
+              name: contract.name,
+              amount: "Error checking",
+              hasApproval: false,
+            };
+          }
+        })
+      );
+
+      // Filter to only show contracts with approvals
+      const activeApprovals = approvals.filter((a) => a.hasApproval);
+
       logger.debug(
-        `Found ${mockApprovals.length} approvals for ${tokenSymbol}`
+        `Found ${activeApprovals.length} active approvals for ${tokenSymbol}`
       );
 
       // Format the response
-      let approvalsText = mockApprovals
-        .map((a) => `* **${a.name}** (${a.spender}): ${a.amount}`)
-        .join("\n");
+      let approvalsText =
+        activeApprovals.length > 0
+          ? activeApprovals
+              .map((a) => `* **${a.name}** (${a.spender}): ${a.amount}`)
+              .join("\n")
+          : "* No active approvals found";
 
       logger.info(`Approval check completed successfully`);
 
       return `
       # Token Approvals for ${tokenSymbol}
       
-      Showing approvals for wallet: ${walletAddress}
+      Showing approvals for wallet: ${userAddress}
       
       The following contracts have approval to spend your ${tokenSymbol}:
       
