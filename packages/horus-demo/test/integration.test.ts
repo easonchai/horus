@@ -327,4 +327,151 @@ describe("Horus Integration", () => {
     // Log the complete state history
     console.log("Complete state history:", stateHistory);
   });
+
+  // Add test for AgentKit integration with dependency token filtering
+  it("PATH 3: should only process threats that affect dependency tokens", async () => {
+    // Create detailed log messages for debugging
+    const log = (message: string, data?: unknown) => {
+      console.log(
+        `[DEPENDENCY-TOKEN-TEST] ${message}`,
+        data ? JSON.stringify(data) : ""
+      );
+    };
+
+    log("Initializing test for dependency token filtering with AgentKit");
+
+    // Initialize our actor with initial context
+    const horusActor = createActor(horusMachine, {
+      input: {
+        signals: [],
+        actionPlan: [],
+        executionResults: [],
+      },
+    });
+
+    // Start the actor
+    log("Starting actor");
+    horusActor.start();
+    log("Initial state:", horusActor.getSnapshot().value);
+
+    // Track states and transitions for verification
+    const stateHistory: string[] = [];
+    // Make sure we capture the initial state
+    stateHistory.push(String(horusActor.getSnapshot().value));
+    log("Added initial state to history:", horusActor.getSnapshot().value);
+
+    horusActor.subscribe((snapshot) => {
+      const stateValue = String(snapshot.value);
+      stateHistory.push(stateValue);
+      log(`State transition to: ${stateValue}`);
+    });
+
+    // Create a test signal with a threat but NOT mentioning any tokens in our dependency graph
+    // This should be evaluated as NOT a relevant threat by AgentKit
+    const irrelevantThreatSignal: Signal = {
+      source: "twitter",
+      content:
+        "Vulnerability discovered in SomeUnrelatedProtocol! Funds at risk for RandomToken.",
+      timestamp: Date.now(),
+    };
+
+    log("Sending irrelevant threat signal", irrelevantThreatSignal);
+
+    // Send signal to the actor
+    horusActor.send({
+      type: "SIGNAL_RECEIVED",
+      signal: irrelevantThreatSignal,
+    });
+
+    // Fast-forward time to run all current and future timers
+    log("Fast-forwarding time to complete all state transitions");
+    await vi.runAllTimersAsync();
+
+    // Check first state and context
+    const firstState = horusActor.getSnapshot();
+    const firstContext = firstState.context;
+
+    log("First completed state", { value: firstState.value, stateHistory });
+    log("First context summary", {
+      signalsCount: firstContext.signals?.length || 0,
+      threatDetected: !!firstContext.detectedThreat,
+    });
+
+    // Verify we didn't progress past evaluating for irrelevant threat
+    let irrelevantSequenceFound = false;
+    for (let i = 0; i < stateHistory.length - 2; i++) {
+      if (
+        stateHistory[i] === "idle" &&
+        stateHistory[i + 1] === "evaluating" &&
+        stateHistory[i + 2] === "idle"
+      ) {
+        irrelevantSequenceFound = true;
+        break;
+      }
+    }
+
+    expect(irrelevantSequenceFound).toBe(true);
+    log("Irrelevant threat correctly ignored, now testing relevant threat");
+
+    // Reset state history for next test
+    stateHistory.length = 0;
+    stateHistory.push(String(horusActor.getSnapshot().value));
+
+    // Create a test signal with a threat mentioning tokens in our dependency graph
+    // This should be evaluated as a relevant threat by AgentKit
+    const relevantThreatSignal: Signal = {
+      source: "twitter",
+      content:
+        "Vulnerability discovered in Uniswap! All funds at risk. USDC and ETH may be affected.",
+      timestamp: Date.now(),
+    };
+
+    log("Sending relevant threat signal", relevantThreatSignal);
+
+    // Send signal to the actor
+    horusActor.send({
+      type: "SIGNAL_RECEIVED",
+      signal: relevantThreatSignal,
+    });
+
+    // Fast-forward time to run all current and future timers
+    log("Fast-forwarding time to complete all state transitions");
+    await vi.runAllTimersAsync();
+
+    // Check final state and context
+    const finalState = horusActor.getSnapshot();
+    const finalContext = finalState.context;
+
+    log("Final state after relevant threat", {
+      value: finalState.value,
+      stateHistory,
+    });
+    log("Final context summary", {
+      signalsCount: finalContext.signals?.length || 0,
+      threatDetected: !!finalContext.detectedThreat,
+      threatSeverity: finalContext.detectedThreat?.severity,
+      actionPlanCount: finalContext.actionPlan?.length || 0,
+      executionResultsCount: finalContext.executionResults?.length || 0,
+    });
+
+    // Verify the signals were processed
+    expect(finalContext.signals).toHaveLength(2);
+    expect(finalContext.signals).toContainEqual(relevantThreatSignal);
+
+    // Verify we went through the expected states for the relevant threat
+    expect(stateHistory).toContain("idle");
+    expect(stateHistory).toContain("evaluating");
+    expect(stateHistory).toContain("processing");
+
+    // Verify the threat was detected for the relevant threat
+    expect(finalContext.detectedThreat).toBeDefined();
+    if (finalContext.detectedThreat) {
+      expect(finalContext.detectedThreat.affectedTokens).toEqual(
+        expect.arrayContaining(["USDC"]) // Should contain USDC
+      );
+    }
+
+    // Log the complete state history
+    log("Complete state history:", stateHistory);
+  });
 });

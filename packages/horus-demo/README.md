@@ -49,7 +49,13 @@ Specialized services handle specific business logic:
 - **ProtocolService**: Manages protocol data and normalization for consistent protocol references
 - **TokenService**: Centralizes token management, including detection, normalization, and address resolution
 
-#### 4. Configuration
+#### 4. Schemas
+
+The system uses Zod schemas for runtime validation:
+
+- **SignalEvaluationResultSchema**: Validates the structure of LLM responses for signal evaluation, ensuring they match the expected format with proper threat details. This ensures that any LLM-generated output can be safely parsed and used within the system.
+
+#### 5. Configuration
 
 Static configuration defines the DeFi ecosystem structure:
 

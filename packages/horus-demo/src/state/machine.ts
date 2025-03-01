@@ -118,6 +118,13 @@ export const horusMachine = setup({
                 console.log("Assigning detected threat:", event.output.threat);
                 return event.output.threat;
               },
+              analysisText: ({ event }) => {
+                console.log(
+                  "Storing analysis text:",
+                  event.output.analysisText
+                );
+                return event.output.analysisText;
+              },
             }),
           },
           {

@@ -1,7 +1,10 @@
 import { createWalletClient, http, WalletClient } from "viem";
 import { privateKeyToAccount } from "viem/accounts";
 import { baseSepolia } from "viem/chains";
+import * as dotenv from "dotenv";
 
+// Load environment variables from .env file
+dotenv.config();
 /**
  * Service for managing wallet interactions
  * Uses Viem to connect to Base Sepolia testnet

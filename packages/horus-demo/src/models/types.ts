@@ -23,6 +23,7 @@ export interface SignalEvaluationResult {
   isThreat: boolean;
   threat?: Threat;
   error?: Error;
+  analysisText?: string; // Raw analysis text from the AI agent
 }
 
 // Action types
