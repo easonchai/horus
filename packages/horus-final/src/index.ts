@@ -1,39 +1,53 @@
 import { agent } from "./agent";
 import { SignalProcessor } from "./signal-processor";
 import { Signal } from "./types";
+import { getLogger } from "./utils/logger";
 
-console.log("Hello World! Horus DeFi Protection System starting...");
+// Initialize logger for this component
+const logger = getLogger("Main");
+
+logger.info("Hello World! Horus DeFi Protection System starting...");
 
 // Create a signal processor
 const signalProcessor = new SignalProcessor(async (signal: Signal) => {
-  console.log(`Received processed signal: "${signal.content}"`);
+  logger.info(
+    `Received processed signal: "${signal.content.substring(0, 30)}..."`
+  );
 
   try {
     // Pass the signal to our Agent for processing
     const result = await agent.processSignal(signal);
-    console.log("Agent analysis result:", result.text);
+    logger.info("Agent analysis completed");
+    logger.debug("Agent analysis result:", result.text);
+    return result; // Return the result to indicate processing is complete
   } catch (error) {
-    console.error("Error processing signal with agent:", error);
+    logger.error("Error processing signal with agent:", error);
+    throw error; // Re-throw to indicate processing failed
   }
 });
 
 // Start processing signals
 try {
   signalProcessor.start(5000); // Poll every 5 seconds
-  console.log("Signal processor started successfully");
+  logger.info("Signal processor started successfully");
 } catch (error) {
-  console.error("Failed to start signal processor:", error);
+  logger.error("Failed to start signal processor:", error);
 }
 
 // Handle application shutdown
 process.on("SIGINT", () => {
-  console.log("Shutting down Horus...");
+  logger.info("Shutting down Horus...");
   signalProcessor.stop();
   process.exit(0);
 });
 
 // Handle uncaught exceptions to prevent app crash
 process.on("uncaughtException", (error) => {
-  console.error("Uncaught exception:", error);
+  logger.error("Uncaught exception:", error);
   // Keep the application running despite the error
 });
+
+// Log that the application is ready
+logger.info(
+  "Horus DeFi Protection System is now running and monitoring for signals"
+);
