@@ -8,111 +8,176 @@ import {
 import "reflect-metadata";
 import { Address, parseAbi } from "viem";
 import { z } from "zod";
-import protocols from "../data/protocols.json";
 import { getLogger } from "../utils/logger";
 
 // Initialize logger for this component
 const logger = getLogger("WithdrawalProvider");
 
 /**
- * Extract protocol configurations from the loaded protocols data
+ * Zod schema for universal contract withdrawal validation
+ * A flexible interface for withdrawing from any contract
  */
-const beefyProtocol = protocols.protocols.find((p: any) => p.name === "Beefy");
+const universalWithdrawSchema = z.object({
+  // Contract identification
+  contractAddress: z.string().regex(/^0x[a-fA-F0-9]{40}$/, {
+    message: "Contract address must be a valid Ethereum address",
+  }),
 
-const uniswapProtocol = protocols.protocols.find(
-  (p: any) => p.name === "UniswapV3"
-);
+  // Protocol information
+  protocol: z
+    .string()
+    .describe(
+      "Protocol name or identifier (e.g., 'uniswap', 'aave', 'custom')"
+    ),
 
-/**
- * Constant addresses for various protocol contracts
- * These are used to interact with the specific vaults and position managers
- */
-const PROTOCOL_ADDRESSES = {
-  BEEFY: {
-    USDC_USDT_VAULT: beefyProtocol?.chains?.["84532"]?.[
-      "beefyUSDC-USDT-Vault"
-    ] as Address | undefined,
-    WBTC_EIGEN_VAULT: beefyProtocol?.chains?.["84532"]?.[
-      "beefyWBTC-EIGEN-Vault"
-    ] as Address | undefined,
-    USDC_EIGEN_VAULT: beefyProtocol?.chains?.["84532"]?.[
-      "beefyUSDC-EIGEN-Vault"
-    ] as Address | undefined,
-  },
-  UNISWAP: {
-    POSITION_MANAGER: uniswapProtocol?.chains?.["84532"]
-      ?.nonfungiblePositionManager as Address | undefined,
-  },
-};
+  protocolAction: z
+    .string()
+    .optional()
+    .describe(
+      "Specific protocol action (e.g., 'withdraw', 'decreaseLiquidity', 'exit')"
+    ),
 
-// Log any missing protocol addresses
-if (!PROTOCOL_ADDRESSES.BEEFY.USDC_USDT_VAULT) {
-  logger.warn(
-    "Beefy USDC-USDT vault address not found in protocol configuration"
-  );
-}
-if (!PROTOCOL_ADDRESSES.BEEFY.WBTC_EIGEN_VAULT) {
-  logger.warn(
-    "Beefy WBTC-EIGEN vault address not found in protocol configuration"
-  );
-}
-if (!PROTOCOL_ADDRESSES.BEEFY.USDC_EIGEN_VAULT) {
-  logger.warn(
-    "Beefy USDC-EIGEN vault address not found in protocol configuration"
-  );
-}
-if (!PROTOCOL_ADDRESSES.UNISWAP.POSITION_MANAGER) {
-  logger.warn(
-    "Uniswap position manager address not found in protocol configuration"
-  );
-}
+  // Protocol-specific parameters (flexible record to handle any protocol)
+  protocolParams: z
+    .record(z.string(), z.any())
+    .optional()
+    .describe("Protocol-specific parameters as key-value pairs"),
 
-/**
- * ABI for Beefy vault operations
- */
-const BEEFY_VAULT_ABI = parseAbi([
-  "function withdraw(uint256 tokenId) external",
-  "function balanceOf(address account) view returns (uint256)",
-]);
+  // Chain information
+  chainId: z
+    .union([z.number(), z.string()])
+    .default(84532)
+    .describe("Chain ID for the withdrawal"),
 
-/**
- * ABI for Uniswap position manager operations
- */
-const UNISWAP_POSITION_MANAGER_ABI = parseAbi([
-  "function decreaseLiquidity(uint256 tokenId, uint128 liquidity, uint256 amount0Min, uint256 amount1Min, uint256 deadline) external returns (uint256, uint256)",
-  "function collect(uint256 tokenId, address recipient, uint128 amount0Max, uint128 amount1Max) external returns (uint256, uint256)",
-  "function positions(uint256 tokenId) external view returns (uint96 nonce, address operator, address token0, address token1, uint24 fee, int24 tickLower, int24 tickUpper, uint128 liquidity, uint256 feeGrowthInside0LastX128, uint256 feeGrowthInside1LastX128, uint128 tokensOwed0, uint128 tokensOwed1)",
-]);
+  // Function details
+  functionName: z.string().min(1, {
+    message: "Function name is required",
+  }),
+  functionSignature: z
+    .string()
+    .optional()
+    .describe(
+      "Optional function signature if ABI is not provided (e.g., 'withdraw(uint256)')"
+    ),
+  abi: z
+    .array(z.any())
+    .optional()
+    .describe(
+      "Contract ABI for the function being called (alternative to functionSignature)"
+    ),
 
-/**
- * Zod schema for Beefy vault withdrawal validation
- */
-const beefyWithdrawSchema = z.object({
-  vaultType: z.enum(["USDC-USDT", "WBTC-EIGEN", "USDC-EIGEN"]),
-  tokenId: z.number().int().positive(),
+  // Function arguments
+  args: z
+    .array(z.any())
+    .default([])
+    .describe("Arguments to pass to the contract function"),
+
+  // Asset identifiers
+  tokenId: z
+    .number()
+    .int()
+    .positive()
+    .optional()
+    .describe("Token ID for NFT-based withdrawals (e.g., LP positions)"),
+  percentage: z
+    .number()
+    .min(0)
+    .max(100)
+    .default(100)
+    .describe("Percentage of assets to withdraw (0-100)"),
+
+  // Asset information
+  assetName: z
+    .string()
+    .optional()
+    .describe("Name of the asset being withdrawn (for better reporting)"),
+  assetSymbol: z
+    .string()
+    .optional()
+    .describe("Symbol of the asset being withdrawn"),
+  assetDecimals: z
+    .number()
+    .int()
+    .min(0)
+    .max(18)
+    .optional()
+    .describe("Decimals of the asset being withdrawn"),
+  assetAddress: z
+    .string()
+    .regex(/^0x[a-fA-F0-9]{40}$/, {
+      message: "Asset address must be a valid Ethereum address",
+    })
+    .optional()
+    .describe("Asset contract address"),
+
+  // Transaction parameters
+  value: z
+    .string()
+    .optional()
+    .describe(
+      "Amount of native currency to send with the transaction (in wei)"
+    ),
+  gasLimit: z
+    .string()
+    .optional()
+    .describe("Optional gas limit for the transaction"),
+  maxFeePerGas: z
+    .string()
+    .optional()
+    .describe("Maximum fee per gas (in wei) for EIP-1559 transactions"),
+  maxPriorityFeePerGas: z
+    .string()
+    .optional()
+    .describe(
+      "Maximum priority fee per gas (in wei) for EIP-1559 transactions"
+    ),
+
+  // Transaction handling
+  waitForConfirmation: z
+    .boolean()
+    .default(true)
+    .describe("Whether to wait for transaction confirmation"),
+  confirmations: z
+    .number()
+    .int()
+    .min(1)
+    .default(1)
+    .describe("Number of confirmations to wait for"),
+
+  // Emergency parameters
+  prioritizeSafety: z
+    .boolean()
+    .default(true)
+    .describe(
+      "For emergency withdrawals: prioritize safety over optimal returns"
+    ),
+  reason: z.string().optional().describe("Reason for emergency withdrawal"),
+
+  // General
+  description: z
+    .string()
+    .optional()
+    .describe("Human-readable description of what this withdrawal is doing"),
+
+  // Callback parameters
+  callbackUrl: z
+    .string()
+    .url()
+    .optional()
+    .describe("URL to call when the withdrawal is complete"),
+
+  // Additional arbitrary data (useful for AI systems to pass context)
+  metadata: z
+    .record(z.string(), z.any())
+    .optional()
+    .describe("Additional metadata or context about the withdrawal operation"),
 });
 
 /**
- * Zod schema for Uniswap position withdrawal validation
- */
-const uniswapWithdrawSchema = z.object({
-  positionId: z.number().int().positive(),
-  percentage: z.number().min(0).max(100).default(100),
-});
-
-/**
- * Zod schema for emergency withdrawal validation
- */
-const emergencyWithdrawSchema = z.object({
-  reason: z.string().optional(),
-  prioritizeSafety: z.boolean().default(true),
-});
-
-/**
- * WithdrawalProvider - An action provider for withdrawing assets from DeFi protocols
+ * WithdrawalProvider - A generic action provider for withdrawing assets from any contract
  *
- * This provider allows users to withdraw their funds from various DeFi protocols,
- * including Beefy vaults and Uniswap liquidity positions.
+ * This provider allows users to withdraw their funds from any contract without
+ * any hardcoded protocol knowledge. All necessary information must be provided in the request.
  */
 export class WithdrawalProvider extends ActionProvider<WalletProvider> {
   /**
@@ -120,275 +185,364 @@ export class WithdrawalProvider extends ActionProvider<WalletProvider> {
    */
   constructor() {
     super("withdrawal-provider", []);
-    logger.info("WithdrawalProvider initialized");
+    logger.info("Generic WithdrawalProvider initialized");
   }
 
   /**
-   * Withdraws funds from a Beefy vault
-   * Allows users to withdraw their assets from various Beefy Finance vaults
+   * Universal withdrawal method for any contract
+   * Provides a flexible interface for interacting with any withdrawal function
+   * Optimized for Viem wallet interactions
    *
    * @param {WalletProvider} walletProvider - Provider for wallet interactions
    * @param {object} args - Arguments for the withdrawal
-   * @param {string} args.vaultType - Type of Beefy vault to withdraw from
-   * @param {number} args.tokenId - ID of the token/position to withdraw
    * @returns {Promise<string>} A human-readable summary of the withdrawal
    * @throws {Error} If the withdrawal operation fails
    */
   @CreateAction({
-    name: "withdraw-from-beefy",
-    description: "Withdraw funds from a Beefy vault",
-    schema: beefyWithdrawSchema,
+    name: "withdraw",
+    description: "Universal withdrawal function for any contract",
+    schema: universalWithdrawSchema,
   })
-  async withdrawFromBeefy(
+  async withdraw(
     walletProvider: WalletProvider,
-    args: z.infer<typeof beefyWithdrawSchema>
+    args: z.infer<typeof universalWithdrawSchema>
   ): Promise<string> {
-    const { vaultType, tokenId } = args;
+    const {
+      contractAddress,
+      protocol,
+      protocolAction,
+      protocolParams,
+      chainId,
+      functionName,
+      functionSignature,
+      abi,
+      args: functionArgs,
+      tokenId,
+      percentage,
+      assetName,
+      assetSymbol,
+      assetDecimals,
+      assetAddress,
+      value,
+      gasLimit,
+      maxFeePerGas,
+      maxPriorityFeePerGas,
+      waitForConfirmation,
+      confirmations,
+      prioritizeSafety,
+      reason,
+      description,
+      callbackUrl,
+      metadata,
+    } = args;
+
     logger.info(
-      `Executing withdraw-from-beefy for vault type: ${vaultType}, tokenId: ${tokenId}`
+      `Executing withdrawal for protocol: ${protocol}, contract: ${contractAddress}, function: ${functionName}`
     );
 
-    try {
-      // Get wallet address from wallet provider
-      const walletAddress = await walletProvider.getAddress();
-      logger.info(`User wallet address: ${walletAddress}`);
-
-      // Map the vault type to the specific vault address
-      let vaultAddress: Address | undefined;
-      let vaultName: string;
-
-      switch (vaultType) {
-        case "USDC-USDT":
-          vaultAddress = PROTOCOL_ADDRESSES.BEEFY.USDC_USDT_VAULT;
-          vaultName = "USDC-USDT Vault";
-          break;
-        case "WBTC-EIGEN":
-          vaultAddress = PROTOCOL_ADDRESSES.BEEFY.WBTC_EIGEN_VAULT;
-          vaultName = "WBTC-EIGEN Vault";
-          break;
-        case "USDC-EIGEN":
-          vaultAddress = PROTOCOL_ADDRESSES.BEEFY.USDC_EIGEN_VAULT;
-          vaultName = "USDC-EIGEN Vault";
-          break;
-      }
-
-      logger.debug(`Selected vault: ${vaultName}, address: ${vaultAddress}`);
-
-      if (!vaultAddress) {
-        logger.error(`Vault address not found for ${vaultType}`);
-        return `Error: Vault address not found for ${vaultType}`;
-      }
-
-      // In a real implementation, you would:
-      // 1. Check if the user has a position in the vault
-      // 2. Execute the withdrawal transaction
-      // 3. Return the result
-      logger.debug("Simulating withdrawal transaction");
-
-      logger.info(`Beefy withdrawal simulation completed successfully`);
-
-      // Return a formatted mock response
-      return `
-      # Withdrawal from Beefy Summary
-      
-      ## Transaction Details
-      * Protocol: Beefy Finance
-      * Vault: ${vaultName}
-      * Vault Address: ${vaultAddress}
-      * Token ID: ${tokenId}
-      * Wallet Address: ${walletAddress}
-      * Status: Simulated
-      
-      ## Notes
-      This withdrawal would remove your funds from the Beefy vault.
-      In a real implementation, this would:
-      
-      1. Connect to the vault contract using your wallet provider
-      2. Call the withdraw function with your token ID
-      3. Confirm the transaction on the blockchain
-      
-      ## Security Considerations
-      Withdrawing funds during times of high volatility might result in slippage.
-      Consider the market conditions before executing this withdrawal.
-      `;
-    } catch (error) {
-      logger.error("Error withdrawing from Beefy:", error);
-      return `Error withdrawing from Beefy vault (${vaultType}): ${error}`;
+    // Log protocol-specific parameters if provided
+    if (protocolParams) {
+      logger.info(`Protocol params: ${JSON.stringify(protocolParams)}`);
     }
-  }
 
-  /**
-   * Withdraws liquidity from a Uniswap position
-   * Allows users to remove liquidity from their Uniswap V3 positions
-   * and collect the resulting tokens and fees
-   *
-   * @param {WalletProvider} walletProvider - Provider for wallet interactions
-   * @param {object} args - Arguments for the withdrawal
-   * @param {number} args.positionId - ID of the Uniswap position
-   * @param {number} args.percentage - Percentage of liquidity to withdraw (default: 100)
-   * @returns {Promise<string>} A human-readable summary of the withdrawal
-   * @throws {Error} If the withdrawal operation fails
-   */
-  @CreateAction({
-    name: "withdraw-from-uniswap",
-    description: "Withdraw liquidity from a Uniswap position",
-    schema: uniswapWithdrawSchema,
-  })
-  async withdrawFromUniswap(
-    walletProvider: WalletProvider,
-    args: z.infer<typeof uniswapWithdrawSchema>
-  ): Promise<string> {
-    const { positionId, percentage } = args;
-    logger.info(
-      `Executing withdraw-from-uniswap for positionId: ${positionId}, percentage: ${percentage}%`
-    );
+    // Log additional metadata if provided
+    if (metadata) {
+      logger.info(`Additional metadata: ${JSON.stringify(metadata)}`);
+    }
+
+    // Log asset details if provided
+    if (assetName || assetSymbol || assetAddress) {
+      logger.info(
+        `Asset details: ${assetName || ""} ${
+          assetSymbol ? `(${assetSymbol})` : ""
+        } ${assetAddress ? `at ${assetAddress}` : ""}`
+      );
+    }
 
     try {
       // Get wallet address from wallet provider
       const walletAddress = await walletProvider.getAddress();
       logger.info(`User wallet address: ${walletAddress}`);
 
-      const positionManagerAddress =
-        PROTOCOL_ADDRESSES.UNISWAP.POSITION_MANAGER;
-      logger.debug(`Position manager address: ${positionManagerAddress}`);
+      // Process args and function name
+      let processedArgs = [...functionArgs];
+      let processedFunctionName = protocolAction || functionName;
 
-      if (!positionManagerAddress) {
-        logger.error("Uniswap Position Manager address not found");
-        return "Error: Uniswap Position Manager address not found";
+      // Apply generic argument handling
+      if (
+        tokenId &&
+        processedArgs.length === 0 &&
+        processedFunctionName.toLowerCase().includes("withdraw")
+      ) {
+        logger.debug("Adding tokenId as the first argument for withdrawal");
+        processedArgs = [tokenId];
       }
 
-      // In a real implementation, you would:
-      // 1. Get the position details
-      // 2. Calculate the liquidity to withdraw based on percentage
-      // 3. Execute the decreaseLiquidity transaction
-      // 4. Execute the collect transaction to get the tokens
+      // Process any numbers in protocol params
+      if (protocolParams) {
+        logger.debug(`Processing protocol params for ${protocol}`);
+
+        // Convert any string numbers to BigInt if they look like they need conversion
+        for (const [key, value] of Object.entries(protocolParams)) {
+          if (
+            typeof value === "string" &&
+            /^\d+$/.test(value) &&
+            (key.toLowerCase().includes("amount") ||
+              key.toLowerCase().includes("value") ||
+              key.toLowerCase().includes("wei") ||
+              key.toLowerCase().includes("min") ||
+              key.toLowerCase().includes("max"))
+          ) {
+            logger.debug(
+              `Converting string value for ${key} to BigInt: ${value}`
+            );
+            protocolParams[key] = BigInt(value);
+          }
+        }
+      }
+
+      // Get the appropriate ABI
+      let contractAbi;
+      if (abi) {
+        contractAbi = abi;
+        logger.debug("Using provided ABI");
+      } else if (functionSignature) {
+        logger.debug(`Using function signature: ${functionSignature}`);
+        contractAbi = parseAbi([functionSignature]);
+      } else {
+        logger.warn(
+          "No ABI or function signature provided, attempting a minimal ABI for the function"
+        );
+        // Create a minimal ABI based on function name and args
+        const argTypes = processedArgs
+          .map((arg) => {
+            if (
+              typeof arg === "string" &&
+              arg.startsWith("0x") &&
+              arg.length === 42
+            )
+              return "address";
+            if (
+              typeof arg === "bigint" ||
+              (typeof arg === "number" && Number.isInteger(arg))
+            )
+              return "uint256";
+            if (typeof arg === "boolean") return "bool";
+            return "bytes"; // Default to bytes for unknown types
+          })
+          .join(",");
+
+        const minimalSignature = `function ${processedFunctionName}(${argTypes})`;
+        logger.debug(
+          `Generated minimal function signature: ${minimalSignature}`
+        );
+
+        try {
+          contractAbi = parseAbi([minimalSignature]);
+        } catch (error) {
+          logger.error(
+            "Failed to create minimal ABI, requiring explicit ABI or signature"
+          );
+          return "Error: Either ABI or function signature must be provided. Could not generate a minimal ABI.";
+        }
+      }
+
+      // Build transaction parameters for Viem
+      const txParams: any = {
+        address: contractAddress as Address,
+        abi: contractAbi,
+        functionName: processedFunctionName,
+        args: processedArgs,
+      };
+
+      // Add optional transaction parameters if provided
+      if (value) {
+        txParams.value = BigInt(value);
+        logger.debug(`Transaction value: ${value} wei`);
+      }
+
+      if (gasLimit) {
+        txParams.gas = BigInt(gasLimit);
+        logger.debug(`Gas limit: ${gasLimit}`);
+      }
+
+      // Add EIP-1559 fee parameters if provided
+      if (maxFeePerGas) {
+        txParams.maxFeePerGas = BigInt(maxFeePerGas);
+        logger.debug(`Max fee per gas: ${maxFeePerGas} wei`);
+      }
+
+      if (maxPriorityFeePerGas) {
+        txParams.maxPriorityFeePerGas = BigInt(maxPriorityFeePerGas);
+        logger.debug(`Max priority fee per gas: ${maxPriorityFeePerGas} wei`);
+      }
+
+      // Log the transaction parameters
       logger.debug(
-        "Simulating position details retrieval and liquidity withdrawal"
+        `Transaction parameters: ${JSON.stringify({
+          ...txParams,
+          // Convert BigInts to strings for logging
+          value: value ? value : undefined,
+          gas: gasLimit ? gasLimit : undefined,
+          maxFeePerGas: maxFeePerGas ? maxFeePerGas : undefined,
+          maxPriorityFeePerGas: maxPriorityFeePerGas
+            ? maxPriorityFeePerGas
+            : undefined,
+          args: processedArgs.map((arg) =>
+            typeof arg === "bigint" ? arg.toString() : arg
+          ),
+        })}`
       );
 
-      // Calculate how much liquidity to withdraw
-      const liquidityPercentage = percentage === 100 ? "all" : `${percentage}%`;
-      logger.debug(`Withdrawing ${liquidityPercentage} of liquidity`);
+      // In a real implementation with ViemWalletProvider:
+      // 1. Get the wallet client from the wallet provider
+      // const walletClient = await walletProvider.getWalletClient();
+      // 2. Use the writeContract method to execute the transaction
+      // const hash = await walletClient.writeContract(txParams);
+      // 3. If confirmation is requested, wait for it
+      // if (waitForConfirmation) {
+      //   await walletClient.waitForTransactionReceipt({
+      //     hash,
+      //     confirmations
+      //   });
+      // }
+      // 4. If a callback URL is provided, notify of completion
+      // if (callbackUrl) {
+      //   await fetch(callbackUrl, {
+      //     method: 'POST',
+      //     headers: { 'Content-Type': 'application/json' },
+      //     body: JSON.stringify({
+      //       status: 'success',
+      //       txHash: hash,
+      //       metadata
+      //     })
+      //   });
+      // }
 
-      logger.info(`Uniswap withdrawal simulation completed successfully`);
+      logger.debug(
+        `Simulating Viem contract write call to ${processedFunctionName}`
+      );
 
-      // Return a formatted mock response
+      if (waitForConfirmation) {
+        logger.debug(`Will wait for ${confirmations} confirmation(s)`);
+      }
+
+      if (callbackUrl) {
+        logger.debug(`Will notify ${callbackUrl} upon completion`);
+      }
+
+      logger.info(`Withdrawal simulation completed successfully`);
+
+      // Format protocol parameters for display
+      const protocolParamsFormatted = protocolParams
+        ? Object.entries(protocolParams)
+            .map(([key, value]) => {
+              const valueStr =
+                typeof value === "object"
+                  ? JSON.stringify(value)
+                  : String(value);
+              return `* ${key}: ${valueStr}`;
+            })
+            .join("\n          ")
+        : "* None provided";
+
+      // Format any metadata for display
+      const metadataFormatted = metadata
+        ? Object.entries(metadata)
+            .map(([key, value]) => {
+              const valueStr =
+                typeof value === "object"
+                  ? JSON.stringify(value)
+                  : String(value);
+              return `* ${key}: ${valueStr}`;
+            })
+            .join("\n          ")
+        : "";
+
+      // Add asset information if available
+      let assetDetails = "";
+      if (assetName || assetSymbol || assetAddress) {
+        assetDetails = `
+        ## Asset Information
+        ${assetName ? `* Name: ${assetName}` : ""}
+        ${assetSymbol ? `* Symbol: ${assetSymbol}` : ""}
+        ${assetDecimals ? `* Decimals: ${assetDecimals}` : ""}
+        ${assetAddress ? `* Address: ${assetAddress}` : ""}`;
+      }
+
+      // Return a formatted response
+      const responseTitle = `${protocol} Withdrawal`;
+
+      // Return a formatted mock response with Viem-specific details
       return `
-      # Uniswap Liquidity Withdrawal Summary
+      # ${responseTitle}
+      
+      ## Protocol Information
+      * Protocol: ${protocol}
+      * Chain ID: ${chainId}
+      ${description ? `* Description: ${description}` : ""}
+      ${reason ? `* Reason: ${reason}` : ""}
+      
+      ## Protocol Parameters
+      ${protocolParamsFormatted}
+      ${assetDetails}
+      ${
+        metadataFormatted
+          ? `\n      ## Additional Metadata\n      ${metadataFormatted}`
+          : ""
+      }
       
       ## Transaction Details
-      * Protocol: Uniswap V3
-      * Position ID: ${positionId}
-      * Withdraw Amount: ${liquidityPercentage} of position
-      * Position Manager: ${positionManagerAddress}
+      * Contract Address: ${contractAddress}
+      * Function: ${processedFunctionName}
       * Wallet Address: ${walletAddress}
+      ${tokenId ? `* Token ID: ${tokenId}` : ""}
+      ${percentage !== 100 ? `* Withdrawal Percentage: ${percentage}%` : ""}
+      ${value ? `* Value Sent: ${value} wei` : ""}
+      ${gasLimit ? `* Gas Limit: ${gasLimit}` : ""}
+      ${maxFeePerGas ? `* Max Fee Per Gas: ${maxFeePerGas} wei` : ""}
+      ${
+        maxPriorityFeePerGas
+          ? `* Max Priority Fee Per Gas: ${maxPriorityFeePerGas} wei`
+          : ""
+      }
+      * Wait For Confirmation: ${waitForConfirmation ? "Yes" : "No"}
+      ${waitForConfirmation ? `* Confirmations Required: ${confirmations}` : ""}
+      ${callbackUrl ? `* Callback URL: ${callbackUrl}` : ""}
       * Status: Simulated
+      
+      ## Function Details
+      * ${functionSignature || "Using provided or generated ABI"}
+      * Arguments: ${JSON.stringify(
+        processedArgs.map((arg) =>
+          typeof arg === "bigint" ? arg.toString() : arg
+        )
+      )}
       
       ## Process
-      This withdrawal would execute in two steps:
-      
-      1. Call \`decreaseLiquidity\` to remove ${liquidityPercentage} of your liquidity
-      2. Call \`collect\` to receive the withdrawn tokens
-      
-      ## Estimated Returns
-      In a real implementation, this would calculate and show:
-      * Estimated Token A: X.XXX
-      * Estimated Token B: Y.YYY
-      * Collected Fees: Z.ZZZ
-      
-      ## Security Considerations
-      Withdrawing liquidity during high volatility periods may result in suboptimal returns.
-      Consider market conditions before proceeding.
-      `;
-    } catch (error) {
-      logger.error("Error withdrawing from Uniswap:", error);
-      return `Error withdrawing from Uniswap position ${positionId}: ${error}`;
-    }
-  }
-
-  /**
-   * Performs an emergency withdrawal from all connected protocols
-   * Used in case of security threats to quickly secure user funds
-   *
-   * @param {WalletProvider} walletProvider - Provider for wallet interactions
-   * @param {object} args - Arguments for the emergency withdrawal
-   * @param {string} [args.reason] - Reason for the emergency withdrawal
-   * @param {boolean} [args.prioritizeSafety=true] - Whether to prioritize safety over efficiency
-   * @returns {Promise<string>} A human-readable summary of the emergency withdrawal
-   * @throws {Error} If the emergency withdrawal operation fails
-   */
-  @CreateAction({
-    name: "emergency-withdraw-all",
-    description:
-      "Emergency withdrawal from all connected protocols in case of security threat",
-    schema: emergencyWithdrawSchema,
-  })
-  async emergencyWithdrawAll(
-    walletProvider: WalletProvider,
-    args: z.infer<typeof emergencyWithdrawSchema>
-  ): Promise<string> {
-    const { reason, prioritizeSafety } = args;
-    logger.info(
-      `Executing emergency-withdraw-all: prioritizeSafety=${prioritizeSafety}`
-    );
-    if (reason) {
-      logger.info(`Emergency withdrawal reason: ${reason}`);
-    }
-
-    try {
-      // Get wallet address from wallet provider
-      const walletAddress = await walletProvider.getAddress();
-      logger.info(`User wallet address: ${walletAddress}`);
-
-      // In a real implementation, you would:
-      // 1. Scan for all user positions across protocols
-      // 2. Execute withdrawals in order of priority (set by prioritizeSafety flag)
-      // 3. Report on the results
-      logger.debug("Simulating scan for user positions across all protocols");
-      logger.debug(
-        `Withdrawal strategy: ${prioritizeSafety ? "Safety First" : "Balanced"}`
-      );
-
-      logger.info("Emergency withdrawal simulation completed successfully");
-
-      return `
-      # 🚨 EMERGENCY WITHDRAWAL INITIATED 🚨
-      
-      ## Withdrawal Reason
-      ${reason || "Security threat detected"}
-      
-      ## Wallet Details
-      Executing emergency withdrawal for wallet: ${walletAddress}
-      
-      ## Protocols Targeted
-      * Beefy Finance Vaults
-      * Uniswap V3 Positions
-      
-      ## Withdrawal Strategy
-      ${
-        prioritizeSafety
-          ? "Safety First: Prioritizing fastest withdrawals even if suboptimal"
-          : "Balanced: Attempting to optimize for both safety and value"
+      In a real implementation, this would:
+      1. Connect to the contract at ${contractAddress} using Viem wallet provider
+      2. Call writeContract with the ${processedFunctionName} function and provided arguments
+      3. ${
+        waitForConfirmation
+          ? `Wait for ${confirmations} confirmation(s) on the blockchain`
+          : "Return the transaction hash immediately without waiting for confirmation"
+      }
+      4. ${
+        callbackUrl
+          ? `Notify the callback URL (${callbackUrl}) upon completion`
+          : "Return the transaction receipt with details of the operation"
       }
       
-      ## Status
-      * Scan for user positions: Complete
-      * Withdrawal operations: Simulated
-      
-      ## Next Steps
-      In a real implementation, this action would:
-      1. Identify all your positions across supported protocols
-      2. Execute withdrawals in order of priority
-      3. Move funds to your wallet
-      4. Provide a detailed report of completed operations
-      
-      ## Security Alert
-      This is a high-priority action that should only be used in emergency situations.
-      Please review the reason for this withdrawal and confirm it's necessary.
+      ## Security Considerations
+      * Always verify contract addresses before interacting with them
+      * Ensure you understand the function you're calling and its potential effects
+      * Consider setting appropriate gas parameters during network congestion
+      * For high-value transactions, consider using a hardware wallet with the provider
       `;
     } catch (error) {
-      logger.error("Error executing emergency withdrawal:", error);
-      return `Error executing emergency withdrawal: ${error}`;
+      logger.error("Error performing withdrawal:", error);
+      return `Error performing withdrawal from ${contractAddress}: ${error}`;
     }
   }
 
