@@ -141,8 +141,8 @@ export class AgentService {
         system: systemPrompt || this.config.systemMessage || "",
         prompt: prompt,
         temperature: this.config.temperature || 0.2,
-        tools: Object.fromEntries(
-          actions.map((action) => [
+        tools: Object.fromEntries([
+          ...actions.map((action) => [
             action.name,
             {
               name: action.name,
@@ -150,8 +150,32 @@ export class AgentService {
               parameters: action.schema,
               execute: (params) => action.invoke(params),
             },
-          ])
-        ),
+          ]),
+          [
+            "alert",
+            {
+              description: "alert project about potential threats",
+              parameters: z.object({
+                reason: z
+                  .string()
+                  .describe("reason for calling tweet as a threat"),
+                level: z
+                  .number()
+                  .min(1)
+                  .max(10)
+                  .describe(
+                    "threat level of a given tweet; 1-4 is mild; 5-7 is something to address in near future; 8-10 is immediately address"
+                  ),
+              }),
+              execute: (params) => {
+                console.log(
+                  "Alerting project about potential threats:",
+                  params
+                );
+              },
+            },
+          ],
+        ]),
       });
 
       return text;

@@ -1,4 +1,5 @@
 import { assign, setup } from "xstate";
+import { ActionExecutionResult } from "../services/action-executor";
 import { actors } from "./actors";
 import { HorusContext, HorusEvent } from "./types";
 
@@ -208,8 +209,8 @@ export const horusMachine = setup({
         onDone: {
           target: "completed",
           actions: assign({
-            // @ts-expect-error - Actor output matches executionResults type but TypeScript cannot verify
-            executionResults: ({ event }) => event.output,
+            executionResults: ({ event }) =>
+              event.output as ActionExecutionResult[],
           }),
         },
         onError: {

@@ -1,8 +1,12 @@
-import { ViemWalletProvider, WalletProvider } from "@coinbase/agentkit";
+import {
+  ViemWalletProvider,
+  WalletProvider,
+  walletActionProvider,
+} from "@coinbase/agentkit";
 import { fromPromise } from "xstate";
 import { Action, SignalEvaluationResult, Threat } from "../models/types";
 import { evaluateTweetsActionProvider } from "../providers/tweet-evaluation.provider";
-import { threatAnalysisSchema } from "../schemas/threat-analysis.schema";
+import { actionRecommendationSchema, threatAnalysisSchema } from "../schemas";
 import { ActionComposer } from "../services/action-composer";
 import { ActionExecutor } from "../services/action-executor";
 import { AgentService } from "../services/agent-service";
@@ -23,6 +27,14 @@ const agentService = new AgentService({
   actionProviders: [evaluateTweetsActionProvider()],
   systemMessage:
     "You are a specialized security analyst for decentralized finance (DeFi) protocols analyzing tweets for security threats.",
+});
+
+// Create a dedicated service for action composition
+const actionCompositionAgent = new AgentService({
+  walletProvider: walletProvider as WalletProvider,
+  actionProviders: [walletActionProvider()],
+  systemMessage:
+    "You are a specialized security response coordinator for decentralized finance (DeFi) protocols. Your role is to recommend specific actions to mitigate detected security threats.",
 });
 
 // Create action composer and executor services
@@ -173,12 +185,12 @@ export const evaluateSignalsActor = fromPromise(
 
 /**
  * Actor for processing detected threats
- * Simplified since we now get structured data from evaluateSignalsActor
+ * Simplified to just pass through the detected threat without additional processing
  */
 export const processThreatsActor = fromPromise(
   async ({ input }: { input: { context: HorusContext } }): Promise<Threat> => {
     console.log(
-      "[processThreatsActor] Processing threat:",
+      "[processThreatsActor] Passing through threat:",
       input.context.detectedThreat
     );
 
@@ -192,53 +204,14 @@ export const processThreatsActor = fromPromise(
       throw error;
     }
 
-    try {
-      // The threat is already structured with details from evaluateSignalsActor
-      // So we just need to validate and possibly enhance it
-
-      // Check if the threat has all required fields
-      const threat = input.context.detectedThreat;
-
-      // Ensure affectedProtocols is an array
-      if (!Array.isArray(threat.affectedProtocols)) {
-        threat.affectedProtocols = [];
-      }
-
-      // Ensure affectedTokens is an array
-      if (!Array.isArray(threat.affectedTokens)) {
-        threat.affectedTokens = [];
-      }
-
-      // Ensure we have a valid severity
-      if (!["low", "medium", "high", "critical"].includes(threat.severity)) {
-        threat.severity = "medium"; // Default to medium if invalid
-      }
-
-      // If we have analysisText, we can use it to augment the threat info if needed
-      if (input.context.analysisText) {
-        console.log(
-          "[processThreatsActor] Additional analysis text available:",
-          input.context.analysisText.substring(0, 100) + "..."
-        );
-      }
-
-      console.log("[processThreatsActor] Processed threat:", threat);
-      return threat;
-    } catch (error) {
-      console.error("[processThreatsActor] Error processing threat:", error);
-
-      // In case of error, return the original threat rather than failing completely
-      console.warn(
-        "[processThreatsActor] Returning original threat due to processing error"
-      );
-      return input.context.detectedThreat;
-    }
+    // Simply return the detected threat without any processing
+    return input.context.detectedThreat;
   }
 );
 
 /**
  * Actor for composing actions based on detected threats
- * Enhanced with better error handling and fallback
+ * Enhanced to use AgentService for structured action recommendations
  */
 export const composeActionsActor = fromPromise(
   async ({
@@ -262,23 +235,93 @@ export const composeActionsActor = fromPromise(
     }
 
     try {
-      const result = await actionComposer.composeActions(
-        input.context.detectedThreat
-      );
+      // Initialize ActionCompositionAgent if not already initialized
+      await actionCompositionAgent.initialize().catch((error) => {
+        console.warn(
+          "[composeActionsActor] Failed to initialize actionCompositionAgent:",
+          error
+        );
+        // Continue execution - we'll use fallback if needed
+      });
+
+      // Get dependency graph data for context
+      const dependencyGraph = DependencyGraphService.getDependencyGraph();
+      const dependencyGraphString = JSON.stringify(dependencyGraph, null, 2);
+
+      // Create the system prompt for action composition
+      const systemPrompt =
+        "You are a specialized security response coordinator for DeFi protocols. Your task is to recommend specific, actionable steps to mitigate security threats affecting blockchain protocols or tokens.";
+
+      // Use the imported schema instead of defining it inline
+      // Create the user prompt with the threat and dependency graph
+      const prompt = `
+      I need to respond to the following security threat:
+      
+      ${JSON.stringify(input.context.detectedThreat, null, 2)}
+      
+      Our project depends on these protocols and tokens:
+      ${dependencyGraphString}
+      
+      Based on this threat and our dependencies, recommend specific actions that should be taken immediately.
+      Focus on concrete, actionable steps that will protect our assets and mitigate the risk.
+      
+      For each action, return:
+      1. actionType: Must be one of "swap", "withdraw", or "revoke"
+      2. protocol: The name of the affected protocol
+      3. token: The token symbol involved in the action
+      4. description: A detailed explanation of what this action will do
+      5. priority: How urgent this action is ("low", "medium", "high", "critical")
+      6. params: A map of parameters needed (amounts, destinations, etc.)
+
+      choose the best tool for the job. use multiple tools if needed.
+      `;
+
+      // Use generateObject method with the imported actionRecommendationSchema
+      const result = await actionCompositionAgent.generateObject({
+        prompt,
+        schema: actionRecommendationSchema,
+        systemPrompt,
+        temperature: 0.2, // Low temperature for consistent, practical recommendations
+      });
 
       console.log("[composeActionsActor] Action composition result:", result);
 
       // Handle empty actions result
-      if (!result || result.length === 0) {
+      if (!result || !result.actions || result.actions.length === 0) {
         console.warn("[composeActionsActor] No actions generated for threat");
         return [];
       }
 
-      return result;
+      // Transform the result into Action objects with the correct structure
+      const actions: Action[] = result.actions.map((action) => ({
+        type: action.actionType,
+        protocol: action.protocol,
+        token: action.token,
+        params: action.params || {},
+      }));
+
+      return actions;
     } catch (error) {
       console.error("[composeActionsActor] Error composing actions:", error);
 
-      // Return empty array instead of throwing, allowing state machine to continue
+      // Fallback to using original actionComposer if agent-based approach fails
+      try {
+        console.warn("[composeActionsActor] Falling back to actionComposer");
+        const fallbackActions = await actionComposer.composeActions(
+          input.context.detectedThreat
+        );
+
+        if (fallbackActions && fallbackActions.length > 0) {
+          return fallbackActions;
+        }
+      } catch (fallbackError) {
+        console.error(
+          "[composeActionsActor] Fallback also failed:",
+          fallbackError
+        );
+      }
+
+      // Return empty array if both approaches fail, allowing state machine to continue
       return [];
     }
   }
@@ -286,13 +329,14 @@ export const composeActionsActor = fromPromise(
 
 /**
  * Actor for executing composed actions
- * Enhanced with better error handling
+ * Enhanced to execute multiple actions with individual action tracking
  */
 export const executeActionsActor = fromPromise(
   async ({ input }: { input: { context: HorusContext } }) => {
     console.log(
-      "[executeActionsActor] Executing actions:",
-      input.context.actionPlan
+      "[executeActionsActor] Executing actions plan with",
+      input.context.actionPlan?.length || 0,
+      "actions:"
     );
 
     // Input validation with helpful error message
@@ -305,21 +349,55 @@ export const executeActionsActor = fromPromise(
       throw error;
     }
 
+    // Log each action to be executed with an index
+    input.context.actionPlan.forEach((action, index) => {
+      console.log(
+        `[executeActionsActor] Action ${index + 1}/${
+          input.context.actionPlan.length
+        }:`,
+        `${action.type} on ${action.protocol} for ${action.token}`,
+        action.params
+      );
+    });
+
     try {
-      const result = await actionExecutor.executeActions(
+      // Execute all actions at once via the actionExecutor service
+      console.log("[executeActionsActor] Executing batch of actions...");
+      const results = await actionExecutor.executeActions(
         input.context.actionPlan
       );
-      console.log("[executeActionsActor] Action execution result:", result);
-      return result;
+
+      // Log summary of execution results
+      const successCount = results.filter((r) => r.status === "success").length;
+      console.log(
+        `[executeActionsActor] Execution complete: ${successCount}/${results.length} actions succeeded`
+      );
+
+      // Log individual results
+      results.forEach((result, index) => {
+        const status = result.status === "success" ? "✅" : "❌";
+        console.log(
+          `[executeActionsActor] ${status} Action ${index + 1} (${
+            result.action.type
+          }): ${
+            result.status === "success"
+              ? `Success, txHash: ${result.txHash}`
+              : `Failed: ${result.error || "Unknown error"}`
+          }`
+        );
+      });
+
+      return results;
     } catch (error) {
       console.error("[executeActionsActor] Error executing actions:", error);
 
-      // Return partial results if possible
+      // Return partial results with detailed error information for each action
       return input.context.actionPlan.map((action) => ({
-        success: false,
-        txHash: "",
         action,
+        status: "failed" as const,
+        txHash: "",
         error: error instanceof Error ? error.message : String(error),
+        timestamp: Date.now(),
       }));
     }
   }
