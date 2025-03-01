@@ -19,9 +19,7 @@ function init() {
 async function sendTask(proofOfTask, data, taskDefinitionId) {
 
   var wallet = new ethers.Wallet(privateKey);
-  console.log(`Private Key: ${privateKey}`)
   var performerAddress = wallet.address;
-  console.log(`address: ${performerAddress}`)
 
   data = ethers.hexlify(ethers.toUtf8Bytes(data));
   const message = ethers.AbiCoder.defaultAbiCoder().encode(["string", "bytes", "address", "uint16"], [proofOfTask, data, performerAddress, taskDefinitionId]);

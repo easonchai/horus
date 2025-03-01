@@ -14,8 +14,9 @@ router.post("/execute", async (req, res) => {
         var taskDefinitionId = Number(req.body.taskDefinitionId) || 0;
         console.log(`taskDefinitionId: ${taskDefinitionId}`);
 
-        const result = await oracleService.getPrice("ETHUSDT");
+        const result = await oracleService.getPrice("USDC/USDT");
         result.price = req.body.fakePrice || result.price;
+        console.log(result)
         const cid = await dalService.publishJSONToIpfs(result);
         const data = "hello";
         await dalService.sendTask(cid, data, taskDefinitionId);

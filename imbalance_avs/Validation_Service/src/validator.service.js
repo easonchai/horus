@@ -2,15 +2,15 @@ require('dotenv').config();
 const dalService = require("./dal.service");
 const oracleService = require("./oracle.service");
 
+const MAX_DEVIATION = 0.01
 async function validate(proofOfTask) {
 
   try {
       const taskResult = await dalService.getIPfsTask(proofOfTask);
-      var data = await oracleService.getPrice("ETHUSDT");
-      const upperBound = data.price * 1.05;
-      const lowerBound = data.price * 0.95;
+      var data = await oracleService.getPrice("USDC/USDT");
       let isApproved = true;
-      if (taskResult.price > upperBound || taskResult.price < lowerBound) {
+      const deviation = Math.abs(taskResult.price - 1.0)
+      if(deviation >= MAX_DEVIATION) {
         isApproved = false;
       }
       return isApproved;
