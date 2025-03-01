@@ -1,5 +1,11 @@
 import * as dotenv from "dotenv";
-import { createWalletClient, http, WalletClient } from "viem";
+import {
+  createWalletClient,
+  createPublicClient,
+  http,
+  WalletClient,
+  PublicClient,
+} from "viem";
 import { privateKeyToAccount } from "viem/accounts";
 import { baseSepolia } from "viem/chains";
 
@@ -11,6 +17,7 @@ dotenv.config();
  */
 export class Wallet {
   private walletClient: WalletClient | null = null;
+  private publicClient: any | null = null;
 
   constructor() {
     // Initialize wallet with private key from env
@@ -37,10 +44,24 @@ export class Wallet {
         transport: http("https://sepolia.base.org"),
       });
 
+      // Create public client
+      this.publicClient = createPublicClient({
+        chain: baseSepolia,
+        transport: http("https://sepolia.base.org"),
+      });
+
       console.log("Wallet initialized successfully");
     } catch (error) {
       console.error("Failed to initialize wallet:", error);
     }
+  }
+
+  getAddress() {
+    if (!this.walletClient) {
+      throw new Error("Wallet client not initialized");
+    }
+
+    return this.walletClient.getAddresses();
   }
 
   /**
@@ -50,4 +71,28 @@ export class Wallet {
   getWalletClient() {
     return this.walletClient;
   }
+
+  /**
+   * Get the public client instance
+   * @returns The Viem public client or null if initialization failed
+   */
+  getPublicClient() {
+    return this.publicClient;
+  }
+
+  /**
+   * Get the chain instance
+   * @returns The Viem chain instance or null if initialization failed
+   */
+  getChain() {
+    return baseSepolia;
+  }
 }
+
+// Create singleton instance
+const walletInstance = new Wallet();
+
+// Export functions to get clients
+export const getWalletClient = () => walletInstance.getWalletClient();
+export const getPublicClient = () => walletInstance.getPublicClient();
+export const getChain = () => walletInstance.getChain();

@@ -5,6 +5,8 @@ services:
       context: .
       dockerfile: Dockerfile
     container_name: horus-final
+    env_file:
+      - .env
     volumes:
       - ./src:/app/src
     ports:

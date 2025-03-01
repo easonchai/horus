@@ -6,12 +6,12 @@ import {
   WalletProvider,
 } from "@coinbase/agentkit";
 import "reflect-metadata";
-import { Address, parseAbi } from "viem";
-import { z } from "zod";
+import { getLogger } from "../utils/logger";
 import dependencyGraphData from "../data/dependency_graph.json";
 import protocols from "../data/protocols.json";
 import tokens from "../data/tokens.json";
-import { getLogger } from "../utils/logger";
+import { z } from "zod";
+import { Wallet } from "../wallet";
 
 // Initialize logger for this component
 const logger = getLogger("SwapProvider");
@@ -42,7 +42,7 @@ class DependencyGraphService {
  * Represents essential information about a token
  */
 interface TokenInfo {
-  address: Address;
+  address: string;
   decimals: number;
 }
 
@@ -84,7 +84,7 @@ const getTokenInfo = (symbol: string): TokenInfo => {
     throw new Error(`Token ${symbol} not found`);
   }
   return {
-    address: token.networks["84532"] as Address,
+    address: token.networks["84532"],
     decimals: token.decimals,
   };
 };
@@ -114,7 +114,7 @@ const uniswapProtocol = protocols.protocols.find(
 // Make sure we have a default value in case UniswapV3 is not found
 const UNISWAP = {
   ROUTER: uniswapProtocol?.chains?.["84532"]?.swapRouter02 as
-    | Address
+    | string
     | undefined,
   FEE_TIER: 500, // 0.05%
 };
@@ -126,23 +126,24 @@ if (!UNISWAP.ROUTER) {
 /**
  * ABI for the Uniswap V3 Router
  */
-const ROUTER_ABI = parseAbi([
+const ROUTER_ABI = [
   "function exactInputSingle((address tokenIn, address tokenOut, uint24 fee, address recipient, uint256 amountIn, uint256 amountOutMinimum, uint160 sqrtPriceLimitX96)) external payable returns (uint256 amountOut)",
-]);
+];
 
 /**
  * ABI for ERC20 token functions
  */
-const ERC20_ABI = parseAbi([
+const ERC20_ABI = [
   "function balanceOf(address account) view returns (uint256)",
   "function approve(address spender, uint256 amount) returns (bool)",
-]);
+];
 
 /**
  * Zod schema for swap action input validation
  */
 const swapSchema = z.object({
-  fromToken: z.enum(["USDC", "USDT"]),
+  fromToken: z.enum(["USDC", "USDT"]).describe("Token to swap from"),
+  amount: z.number().describe("Amount of tokens to swap"),
 });
 
 /**
@@ -178,17 +179,31 @@ export class SwapProvider extends ActionProvider<WalletProvider> {
     walletProvider: WalletProvider,
     args: z.infer<typeof swapSchema>
   ): Promise<string> {
-    const { fromToken } = args;
-    logger.info(`Executing swap-max-balance for ${fromToken}`);
+    const { fromToken, amount } = args;
+    logger.info(
+      `Executing swap-max-balance for ${fromToken}, amount: ${amount}`
+    );
 
     try {
+      // Validate Uniswap router address
+      if (!UNISWAP.ROUTER) {
+        throw new Error("Uniswap router address not found in configuration");
+      }
+
       // Get user's wallet address from the wallet provider
+      // const wallet = new Wallet();
       const userAddress = await walletProvider.getAddress();
       logger.info(`User wallet address: ${userAddress}`);
 
       // Get token info
       const tokenIn = getTokenInfo(fromToken);
       const tokenOut = getTokenInfo(fromToken === "USDC" ? "USDT" : "USDC");
+
+      // Get swap info from dependency graph
+      const swapInfo = getSwapInfo(fromToken);
+      logger.debug(
+        `Using swap function: ${swapInfo.functionName} from ${swapInfo.protocol}`
+      );
 
       logger.debug(`Token in: ${fromToken}, address: ${tokenIn.address}`);
       logger.debug(
@@ -197,7 +212,84 @@ export class SwapProvider extends ActionProvider<WalletProvider> {
         }`
       );
 
-      logger.info(`Swap simulation completed successfully`);
+      // Convert amount to token units with decimals
+      const amountInWei = BigInt(amount * 10 ** tokenIn.decimals);
+      logger.debug(`Amount in wei: ${amountInWei}`);
+
+      // Step 2: Approve the router to spend tokens
+      logger.info(
+        `Approving ${UNISWAP.ROUTER} to spend ${amountInWei} ${fromToken}`
+      );
+
+      // Approve the router to spend tokens
+      const wallet = new Wallet();
+      const { getPublicClient, getWalletClient } = wallet;
+      const publicClient = getPublicClient();
+      const walletClient = getWalletClient();
+
+      const approvalTxHash = await publicClient.writeContract({
+        address: tokenIn.address,
+        abi: ERC20_ABI,
+        functionName: "approve",
+        args: [UNISWAP.ROUTER, amountInWei.toString()],
+        chainId: 84532, // Base Sepolia
+      });
+
+      logger.info(`Approval transaction hash: ${approvalTxHash}`);
+
+      // Wait for approval transaction to be mined
+      const approvalReceipt = await publicClient.waitForTransactionReceipt({
+        hash: approvalTxHash,
+      });
+
+      logger.info(`Approval transaction confirmed: ${approvalReceipt.status}`);
+
+      if (approvalReceipt.status !== "success") {
+        throw new Error("Token approval failed");
+      }
+
+      // Step 3: Execute the swap
+      // Calculate minimum amount out (with 0.5% slippage)
+      const amountOutMinimum = (amountInWei * BigInt(995)) / BigInt(1000);
+
+      // Prepare swap parameters
+      const swapParams = {
+        tokenIn: tokenIn.address,
+        tokenOut: tokenOut.address,
+        fee: UNISWAP.FEE_TIER,
+        recipient: userAddress,
+        amountIn: amountInWei.toString(),
+        amountOutMinimum: amountOutMinimum.toString(),
+        sqrtPriceLimitX96: BigInt(0).toString(), // No price limit
+      };
+
+      logger.debug(
+        `Swap parameters: ${JSON.stringify(swapParams, (_, v) =>
+          typeof v === "bigint" ? v.toString() : v
+        )}`
+      );
+
+      // Execute the swap transaction
+      const swapTxHash = await publicClient.writeContract({
+        address: UNISWAP.ROUTER,
+        abi: ROUTER_ABI,
+        functionName: "exactInputSingle",
+        args: [swapParams],
+        chainId: 84532, // Base Sepolia
+      });
+
+      logger.info(`Swap transaction hash: ${swapTxHash}`);
+
+      // Wait for swap transaction to be mined
+      const swapReceipt = await publicClient.waitForTransactionReceipt({
+        hash: swapTxHash,
+      });
+
+      logger.info(`Swap transaction confirmed: ${swapReceipt.status}`);
+
+      if (swapReceipt.status !== "success") {
+        throw new Error("Swap transaction failed");
+      }
 
       // Return a formatted response
       return `
@@ -206,17 +298,16 @@ export class SwapProvider extends ActionProvider<WalletProvider> {
       ## Transaction Details
       * From Token: ${fromToken}
       * To Token: ${fromToken === "USDC" ? "USDT" : "USDC"}
-      * Amount: [Max Balance]
+      * Amount: ${amount} ${fromToken}
       * User Address: ${userAddress}
-      * Status: Simulated
+      * Status: 🟢 Success
 
-      ## Notes
-      This is a simulated swap. In a real implementation, this would:
-      1. Check token balance using the wallet provider
-      2. Approve the router to spend tokens
-      3. Execute the swap transaction
+      ## Transaction Information
+      * Approval TX: [${approvalTxHash}](https://sepolia.basescan.org/tx/${approvalTxHash})
+      * Swap TX: [${swapTxHash}](https://sepolia.basescan.org/tx/${swapTxHash})
+      * Slippage Protection: 0.5%
       
-      The wallet provider has been successfully connected.
+      Your swap has been successfully completed!
       `;
     } catch (error) {
       logger.error("Error executing swap:", error);
