@@ -9,6 +9,7 @@ import "reflect-metadata";
 import { Address, parseAbi } from "viem";
 import { z } from "zod";
 import { getLogger } from "../utils/logger";
+import { Wallet } from "../wallet";
 
 // Initialize logger for this component
 const logger = getLogger("WithdrawalProvider");
@@ -394,44 +395,57 @@ export class WithdrawalProvider extends ActionProvider<WalletProvider> {
         })}`
       );
 
-      // In a real implementation with ViemWalletProvider:
-      // 1. Get the wallet client from the wallet provider
-      // const walletClient = await walletProvider.getWalletClient();
-      // 2. Use the writeContract method to execute the transaction
-      // const hash = await walletClient.writeContract(txParams);
-      // 3. If confirmation is requested, wait for it
-      // if (waitForConfirmation) {
-      //   await walletClient.waitForTransactionReceipt({
-      //     hash,
-      //     confirmations
-      //   });
-      // }
-      // 4. If a callback URL is provided, notify of completion
-      // if (callbackUrl) {
-      //   await fetch(callbackUrl, {
-      //     method: 'POST',
-      //     headers: { 'Content-Type': 'application/json' },
-      //     body: JSON.stringify({
-      //       status: 'success',
-      //       txHash: hash,
-      //       metadata
-      //     })
-      //   });
-      // }
+      // REAL IMPLEMENTATION WITH VIEM
+      logger.info("Creating Wallet instance from wallet utility");
+      const wallet = new Wallet();
+      const publicClient = wallet.getPublicClient();
+      const walletClient = wallet.getWalletClient();
 
-      logger.debug(
-        `Simulating Viem contract write call to ${processedFunctionName}`
-      );
+      if (!walletClient || !publicClient) {
+        throw new Error("Failed to get wallet client or public client");
+      }
 
+      logger.info("Executing contract write call");
+      const hash = await publicClient.writeContract(txParams);
+      logger.info(`Transaction submitted with hash: ${hash}`);
+
+      let receipt = null;
+      // If confirmation is requested, wait for it
       if (waitForConfirmation) {
-        logger.debug(`Will wait for ${confirmations} confirmation(s)`);
+        logger.info(`Waiting for ${confirmations} confirmation(s)...`);
+        receipt = await publicClient.waitForTransactionReceipt({
+          hash,
+          confirmations,
+        });
+        logger.info(`Transaction confirmed in block ${receipt.blockNumber}`);
       }
 
+      // If a callback URL is provided, notify of completion
       if (callbackUrl) {
-        logger.debug(`Will notify ${callbackUrl} upon completion`);
+        logger.info(`Notifying callback URL: ${callbackUrl}`);
+        try {
+          await fetch(callbackUrl, {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+              status: "success",
+              txHash: hash,
+              receipt: receipt
+                ? {
+                    blockNumber: receipt.blockNumber,
+                    gasUsed: receipt.gasUsed.toString(),
+                    effectiveGasPrice: receipt.effectiveGasPrice.toString(),
+                    status: receipt.status,
+                  }
+                : null,
+              metadata,
+            }),
+          });
+          logger.info("Callback notification sent successfully");
+        } catch (callbackError) {
+          logger.error(`Failed to notify callback URL: ${callbackError}`);
+        }
       }
-
-      logger.info(`Withdrawal simulation completed successfully`);
 
       // Format protocol parameters for display
       const protocolParamsFormatted = protocolParams
@@ -470,10 +484,22 @@ export class WithdrawalProvider extends ActionProvider<WalletProvider> {
         ${assetAddress ? `* Address: ${assetAddress}` : ""}`;
       }
 
+      // Add transaction details
+      const txDetails = `
+      ## Transaction Details
+      * Transaction Hash: ${hash}
+      ${receipt ? `* Block Number: ${receipt.blockNumber}` : ""}
+      ${receipt ? `* Gas Used: ${receipt.gasUsed.toString()}` : ""}
+      ${
+        receipt
+          ? `* Status: ${receipt.status === "success" ? "Success" : "Failed"}`
+          : "* Status: Pending"
+      }`;
+
       // Return a formatted response
       const responseTitle = `${protocol} Withdrawal`;
 
-      // Return a formatted mock response with Viem-specific details
+      // Return a formatted response with REAL transaction details
       return `
       # ${responseTitle}
       
@@ -491,8 +517,9 @@ export class WithdrawalProvider extends ActionProvider<WalletProvider> {
           ? `\n      ## Additional Metadata\n      ${metadataFormatted}`
           : ""
       }
+      ${txDetails}
       
-      ## Transaction Details
+      ## Contract Details
       * Contract Address: ${contractAddress}
       * Function: ${processedFunctionName}
       * Wallet Address: ${walletAddress}
@@ -509,7 +536,6 @@ export class WithdrawalProvider extends ActionProvider<WalletProvider> {
       * Wait For Confirmation: ${waitForConfirmation ? "Yes" : "No"}
       ${waitForConfirmation ? `* Confirmations Required: ${confirmations}` : ""}
       ${callbackUrl ? `* Callback URL: ${callbackUrl}` : ""}
-      * Status: Simulated
       
       ## Function Details
       * ${functionSignature || "Using provided or generated ABI"}
@@ -519,20 +545,12 @@ export class WithdrawalProvider extends ActionProvider<WalletProvider> {
         )
       )}
       
-      ## Process
-      In a real implementation, this would:
-      1. Connect to the contract at ${contractAddress} using Viem wallet provider
-      2. Call writeContract with the ${processedFunctionName} function and provided arguments
-      3. ${
-        waitForConfirmation
-          ? `Wait for ${confirmations} confirmation(s) on the blockchain`
-          : "Return the transaction hash immediately without waiting for confirmation"
+      ## Next Steps
+      * You can view this transaction on a block explorer
+      * The withdrawal should be completed ${
+        receipt ? "successfully" : "once confirmed"
       }
-      4. ${
-        callbackUrl
-          ? `Notify the callback URL (${callbackUrl}) upon completion`
-          : "Return the transaction receipt with details of the operation"
-      }
+      * Always verify that your funds have been received after a withdrawal
       
       ## Security Considerations
       * Always verify contract addresses before interacting with them
