@@ -33,7 +33,7 @@ const actionExecutor = new ActionExecutor();
  * Actor for evaluating signals to detect threats
  * Uses AgentService with AgentKit integration and structured data from generateObject
  */
-const evaluateSignalsActor = fromPromise(
+export const evaluateSignalsActor = fromPromise(
   async ({
     input,
   }: {
@@ -175,7 +175,7 @@ const evaluateSignalsActor = fromPromise(
  * Actor for processing detected threats
  * Simplified since we now get structured data from evaluateSignalsActor
  */
-const processThreatsActor = fromPromise(
+export const processThreatsActor = fromPromise(
   async ({ input }: { input: { context: HorusContext } }): Promise<Threat> => {
     console.log(
       "[processThreatsActor] Processing threat:",
@@ -240,7 +240,7 @@ const processThreatsActor = fromPromise(
  * Actor for composing actions based on detected threats
  * Enhanced with better error handling and fallback
  */
-const composeActionsActor = fromPromise(
+export const composeActionsActor = fromPromise(
   async ({
     input,
   }: {
@@ -288,7 +288,7 @@ const composeActionsActor = fromPromise(
  * Actor for executing composed actions
  * Enhanced with better error handling
  */
-const executeActionsActor = fromPromise(
+export const executeActionsActor = fromPromise(
   async ({ input }: { input: { context: HorusContext } }) => {
     console.log(
       "[executeActionsActor] Executing actions:",
