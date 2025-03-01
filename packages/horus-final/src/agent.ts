@@ -10,6 +10,7 @@ import { openai } from "@ai-sdk/openai";
 import { generateText } from "ai";
 import { agentKit, getAgent } from "./agentKit";
 import dependencyGraphData from "./data/dependency_graph.json";
+import protocolsData from "./data/protocols.json";
 import { Signal } from "./types";
 import { getLogger } from "./utils/logger";
 
@@ -93,6 +94,9 @@ export class Agent {
 
       ## DEPENDENCY GRAPH
       ${JSON.stringify(dependencyGraphData, null, 2)}
+
+      ## PROTOCOLS
+      ${JSON.stringify(protocolsData, null, 2)}
 
       ## YOUR TASK
       1. Analyze this signal to determine if it represents a legitimate security threat to any protocols or tokens in the dependency graph
