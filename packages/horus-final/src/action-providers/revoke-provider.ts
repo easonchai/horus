@@ -1,5 +1,10 @@
 /* eslint-disable @typescript-eslint/no-explicit-any */
-import { ActionProvider, CreateAction, Network } from "@coinbase/agentkit";
+import {
+  ActionProvider,
+  CreateAction,
+  Network,
+  WalletProvider,
+} from "@coinbase/agentkit";
 import "reflect-metadata";
 import { Address, parseAbi } from "viem";
 import { z } from "zod";
@@ -54,7 +59,7 @@ const checkApprovalsSchema = z.object({
  * This provider allows users to revoke token approvals for specific contracts,
  * which is an important security feature to prevent unauthorized access to tokens.
  */
-export class RevokeProvider extends ActionProvider {
+export class RevokeProvider extends ActionProvider<WalletProvider> {
   constructor() {
     super("revoke-provider", []);
   }
@@ -65,14 +70,14 @@ export class RevokeProvider extends ActionProvider {
     schema: revokeSchema,
   })
   async revokeTokenApproval(
+    walletProvider: WalletProvider,
     args: z.infer<typeof revokeSchema>
   ): Promise<string> {
     const { tokenSymbol, spenderAddress } = args;
 
     try {
-      // In a real implementation, we would get the wallet provider from the context
-      // Using mock implementation for demonstration
-      const walletAddress = "0x123..."; // Mock address
+      // Get wallet address from wallet provider
+      const walletAddress = await walletProvider.getAddress();
 
       // Get token info
       const tokenInfo = getTokenInfo(tokenSymbol);
@@ -85,6 +90,7 @@ export class RevokeProvider extends ActionProvider {
       * Token: ${tokenSymbol}
       * Spender Contract: ${spenderAddress}
       * Token Address: ${tokenInfo.address}
+      * Wallet Address: ${walletAddress}
       * Status: Simulated
       
       ## Security Notes
@@ -112,11 +118,15 @@ export class RevokeProvider extends ActionProvider {
     schema: checkApprovalsSchema,
   })
   async checkTokenApprovals(
+    walletProvider: WalletProvider,
     args: z.infer<typeof checkApprovalsSchema>
   ): Promise<string> {
     const { tokenSymbol } = args;
 
     try {
+      // Get wallet address from wallet provider
+      const walletAddress = await walletProvider.getAddress();
+
       // Mock implementation - In a real scenario, you would query the blockchain
       // for all approval events for this token and user
       const mockApprovals = [
@@ -135,6 +145,8 @@ export class RevokeProvider extends ActionProvider {
 
       return `
       # Token Approvals for ${tokenSymbol}
+      
+      Showing approvals for wallet: ${walletAddress}
       
       The following contracts have approval to spend your ${tokenSymbol}:
       
@@ -159,13 +171,6 @@ export class RevokeProvider extends ActionProvider {
         : network.chainId;
     return chainId === 84532; // Base Sepolia
   };
-
-  // Helper method to get the wallet provider
-  private getWalletProvider(): any {
-    // This would need to be implemented based on how AgentKit provides wallet providers
-    // For now, we'll return null and handle it later
-    return (this as any).walletProvider;
-  }
 }
 
 export const revokeProvider = () => new RevokeProvider();

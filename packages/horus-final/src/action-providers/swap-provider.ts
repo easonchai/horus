@@ -1,5 +1,10 @@
 /* eslint-disable @typescript-eslint/no-explicit-any */
-import { ActionProvider, CreateAction, Network } from "@coinbase/agentkit";
+import {
+  ActionProvider,
+  CreateAction,
+  Network,
+  WalletProvider,
+} from "@coinbase/agentkit";
 import "reflect-metadata";
 import { Address, parseAbi } from "viem";
 import { z } from "zod";
@@ -87,7 +92,7 @@ const swapSchema = z.object({
   fromToken: z.enum(["USDC", "USDT"]),
 });
 
-export class SwapProvider extends ActionProvider {
+export class SwapProvider extends ActionProvider<WalletProvider> {
   constructor() {
     super("swap-provider", []);
   }
@@ -98,19 +103,15 @@ export class SwapProvider extends ActionProvider {
       "Swap the maximum balance of a token for another token (USDC to USDT or vice versa)",
     schema: swapSchema,
   })
-  async swapMaxBalance(args: z.infer<typeof swapSchema>): Promise<string> {
+  async swapMaxBalance(
+    walletProvider: WalletProvider,
+    args: z.infer<typeof swapSchema>
+  ): Promise<string> {
     const { fromToken } = args;
 
     try {
-      // In a real implementation, we would get the wallet provider from the context
-      // Use mock implementation for demonstration
-      const provider = {
-        /* Mock provider */
-      };
-      const signer = {
-        /* Mock signer */
-      };
-      const userAddress = "0x123..."; // Mock address
+      // Get user's wallet address from the wallet provider
+      const userAddress = await walletProvider.getAddress();
 
       // Get token info
       const tokenIn = getTokenInfo(fromToken);
@@ -124,15 +125,16 @@ export class SwapProvider extends ActionProvider {
       * From Token: ${fromToken}
       * To Token: ${fromToken === "USDC" ? "USDT" : "USDC"}
       * Amount: [Max Balance]
+      * User Address: ${userAddress}
       * Status: Simulated
 
       ## Notes
       This is a simulated swap. In a real implementation, this would:
-      1. Check token balance
+      1. Check token balance using the wallet provider
       2. Approve the router to spend tokens
       3. Execute the swap transaction
       
-      You can implement these steps by connecting a real wallet provider.
+      The wallet provider has been successfully connected.
       `;
     } catch (error) {
       console.error("Error executing swap:", error);
@@ -148,13 +150,6 @@ export class SwapProvider extends ActionProvider {
         : network.chainId;
     return chainId === 84532; // Base Sepolia
   };
-
-  // Helper method to get the wallet provider
-  private getWalletProvider(): any {
-    // This would need to be implemented based on how AgentKit provides wallet providers
-    // For now, we'll return null and handle it later
-    return (this as any).walletProvider;
-  }
 }
 
 export const swapProvider = () => new SwapProvider();
