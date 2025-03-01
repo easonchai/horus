@@ -8,7 +8,6 @@ async function validate(proofOfTask) {
 
       // Retrieve performer submission
       const taskResult = await dalService.getIPfsTask(proofOfTask);
-
       // Retrieve the submission ourselves to validate 
       const sourceOfTruth = await oracleService.getPrice(taskResult.pair);
 

@@ -15,7 +15,6 @@ router.post("/execute", async (req, res) => {
         const pair = "USDC/USDT"
         var taskDefinitionId = Number(req.body.taskDefinitionId) || 0;
         console.log(`taskDefinitionId: ${taskDefinitionId}`);
-
         const result = await oracleService.getPrice(pair);
         result.price = req.body.fakePrice || result.price;
         let depegged = false;
@@ -27,7 +26,7 @@ router.post("/execute", async (req, res) => {
         const cid = await dalService.publishJSONToIpfs({...result, depegged, pair, entropy: Date.now().toString() });
         const data = "hello";
         await dalService.sendTask(cid, data, taskDefinitionId);
-        return res.status(200).send(new CustomResponse({proofOfTask: cid, data: data, taskDefinitionId: taskDefinitionId, depegged}, "Task executed successfully"));
+        return res.status(200).send(new CustomResponse({proofOfTask: cid, data: data, taskDefinitionId: taskDefinitionId, depegged, pair}, "Task executed successfully"));
     } catch (error) {
         console.log(error)
         return res.status(500).send(new CustomError("Something went wrong", {}));
