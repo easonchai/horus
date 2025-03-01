@@ -99,9 +99,9 @@ export class Agent {
       ${JSON.stringify(protocolsData, null, 2)}
 
       ## Uniswap position tokenIDs
-  USDC-USDT Position TokenId: 14380
-  WBTC-EIGEN Position TokenId: 14381
-  USDC-EIGEN Position TokenId: 14382
+  USDC-USDT Position TokenId: 14426
+  WBTC-EIGEN Position TokenId: 14427
+  USDC-EIGEN Position TokenId: 14428
       Liquidity for all positions is 10000000000. amount0Min & amount1Min are both 0.
 
       ## YOUR TASK

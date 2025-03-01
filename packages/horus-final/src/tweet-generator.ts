@@ -96,7 +96,7 @@ export class TwitterPoller {
       logger.info("Waiting 30 seconds before processing the next signal...");
       this.interval = setTimeout(() => {
         this.processNextTweet();
-      }, 30000); // 30 seconds
+      }, 15000); // 30 seconds
     }
   }
 }
