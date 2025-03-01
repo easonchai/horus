@@ -71,6 +71,8 @@
  */
 
 import { AgentKit, ViemWalletProvider } from "@coinbase/agentkit";
+import { revokeProvider } from "./action-providers/revoke-provider";
+import { swapProvider } from "./action-providers/swap-provider";
 import { Wallet } from "./wallet";
 
 // Cache the AgentKit instance
@@ -100,8 +102,11 @@ export async function getAgent(): Promise<AgentKit> {
   // Create and cache the AgentKit instance
   cachedAgentKit = await AgentKit.from({
     walletProvider,
-    // TODO: Add all of the agent providers here
-    actionProviders: [],
+    // Include all available action providers
+    actionProviders: [
+      swapProvider(),
+      revokeProvider(), // Add the new RevokeProvider
+    ],
   });
 
   return cachedAgentKit;

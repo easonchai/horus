@@ -3,9 +3,9 @@ import { ActionProvider, CreateAction, Network } from "@coinbase/agentkit";
 import "reflect-metadata";
 import { Address, parseAbi } from "viem";
 import { z } from "zod";
-import dependencyGraphData from "./data/dependency_graph.json";
-import protocols from "./data/protocols.json";
-import tokens from "./data/tokens.json";
+import dependencyGraphData from "../data/dependency_graph.json";
+import protocols from "../data/protocols.json";
+import tokens from "../data/tokens.json";
 
 // Create a DependencyGraphService from the JSON data
 class DependencyGraphService {

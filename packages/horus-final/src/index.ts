@@ -1,12 +1,20 @@
+import { agent } from "./agent";
 import { SignalProcessor } from "./signal-processor";
 import { Signal } from "./types";
 
 console.log("Hello World! Horus DeFi Protection System starting...");
 
 // Create a signal processor
-const signalProcessor = new SignalProcessor((signal: Signal) => {
+const signalProcessor = new SignalProcessor(async (signal: Signal) => {
   console.log(`Received processed signal: "${signal.content}"`);
-  // In the future, this is where we would pass the signal to an agent
+
+  try {
+    // Pass the signal to our Agent for processing
+    const result = await agent.processSignal(signal);
+    console.log("Agent analysis result:", result.text);
+  } catch (error) {
+    console.error("Error processing signal with agent:", error);
+  }
 });
 
 // Start processing signals
