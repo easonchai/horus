@@ -12,6 +12,7 @@ import protocols from "../data/protocols.json";
 import tokens from "../data/tokens.json";
 import { z } from "zod";
 import { Wallet } from "../wallet";
+import { baseSepolia } from "viem/chains";
 
 // Initialize logger for this component
 const logger = getLogger("SwapProvider");
@@ -223,17 +224,22 @@ export class SwapProvider extends ActionProvider<WalletProvider> {
 
       // Approve the router to spend tokens
       const wallet = new Wallet();
-      const { getPublicClient, getWalletClient } = wallet;
-      const publicClient = getPublicClient();
-      const walletClient = getWalletClient();
+      const publicClient = wallet.publicClient;
+      const walletClient = wallet.walletClient;
 
-      const approvalTxHash = await publicClient.writeContract({
-        address: tokenIn.address,
+      if (!walletClient) {
+        throw new Error("Wallet client not initialized");
+      }
+
+      logger.info("HERE!");
+      console.log({ walletClient });
+      const approvalTxHash = await walletClient.writeContract({
+        address: tokenIn.address as `0x${string}`,
         abi: ERC20_ABI,
         functionName: "approve",
         args: [UNISWAP.ROUTER, amountInWei.toString()],
-        chainId: 84532, // Base Sepolia
-      });
+        chain: baseSepolia,
+      } as any);
 
       logger.info(`Approval transaction hash: ${approvalTxHash}`);
 
@@ -270,13 +276,12 @@ export class SwapProvider extends ActionProvider<WalletProvider> {
       );
 
       // Execute the swap transaction
-      const swapTxHash = await publicClient.writeContract({
-        address: UNISWAP.ROUTER,
+      const swapTxHash = await walletClient.writeContract({
+        address: UNISWAP.ROUTER as `0x${string}`,
         abi: ROUTER_ABI,
         functionName: "exactInputSingle",
         args: [swapParams],
-        chainId: 84532, // Base Sepolia
-      });
+      } as any);
 
       logger.info(`Swap transaction hash: ${swapTxHash}`);
 

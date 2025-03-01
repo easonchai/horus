@@ -16,10 +16,17 @@ dotenv.config();
  * Uses Viem to connect to Base Sepolia testnet
  */
 export class Wallet {
-  private walletClient: WalletClient | null = null;
-  private publicClient: any | null = null;
+  public walletClient: WalletClient | null = null;
+  public publicClient: any | null = null;
 
   constructor() {
+    this.initialize();
+  }
+
+  /**
+   * Initialize the wallet with private key
+   */
+  initialize() {
     // Initialize wallet with private key from env
     const privateKey = process.env.PRIVATE_KEY || "";
 
@@ -93,6 +100,6 @@ export class Wallet {
 const walletInstance = new Wallet();
 
 // Export functions to get clients
-export const getWalletClient = () => walletInstance.getWalletClient();
-export const getPublicClient = () => walletInstance.getPublicClient();
-export const getChain = () => walletInstance.getChain();
+export const getWalletClient = () => walletInstance.walletClient;
+export const getPublicClient = () => walletInstance.publicClient;
+export const getChain = () => baseSepolia;

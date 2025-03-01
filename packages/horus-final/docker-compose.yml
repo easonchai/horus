@@ -14,8 +14,6 @@ services:
     environment:
       - OPENAI_API_KEY=${OPENAI_API_KEY}
       - PRIVATE_KEY=${PRIVATE_KEY}
-    env_file:
-      - .env
     restart: unless-stopped
     healthcheck:
       test: ["CMD", "wget", "--spider", "-q", "http://localhost:3000"]
