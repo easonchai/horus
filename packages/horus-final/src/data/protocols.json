@@ -4,9 +4,9 @@
       "name": "Beefy",
       "chains": {
         "84532": {
-          "beefyUSDC-USDT-Vault": "0x5ef6F539e37b25c02F843a2b4cC2C42fAbFDE3d2",
-          "beefyWBTC-EIGEN-Vault": "0xF0Cd8a397508aE5B8B1caba3598E7039e23E5CE3",
-          "beefyUSDC-EIGEN-Vault": "0xeA8380F62be6ce2E0A0237add0b07c3582FF2e95"
+          "beefyUSDC-USDT-Vault": "0x59c9D799eEd79B0130eaFf1625FD7290fd24ab0D",
+          "beefyWBTC-EIGEN-Vault": "0xa4a4a33A32d8D55c7Aad83B471f8CCf729bef8ef",
+          "beefyUSDC-EIGEN-Vault": "0x4c49bABf8b4355d98169be5283610B09fA4B0b14"
         }
       },
       "abis": {

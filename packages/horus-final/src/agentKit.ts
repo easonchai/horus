@@ -110,7 +110,7 @@ export async function getAgent(): Promise<AgentKit> {
       swapProvider(),
       revokeProvider(), // Add the new RevokeProvider
       // beefyWithdrawalProvider(), // Add the new WithdrawalProvider
-      uniswapWithdrawalProvider(),
+      // uniswapWithdrawalProvider(),
     ],
   });
 

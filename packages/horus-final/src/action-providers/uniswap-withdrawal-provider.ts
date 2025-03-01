@@ -111,17 +111,21 @@ class UniswapWithdrawalProvider extends ActionProvider<WalletProvider> {
       const processedArgs =
         action === "decreaseLiquidity"
           ? [
-              BigInt(tokenId),
-              BigInt(liquidity || 0),
-              BigInt(amount0Min || 0),
-              BigInt(amount1Min || 0),
-              BigInt(Math.floor(Date.now() / 1000) + 1800),
+              {
+                tokenId: BigInt(tokenId),
+                liquidity: BigInt(liquidity || 0),
+                amount0Min: BigInt(amount0Min || 0),
+                amount1Min: BigInt(amount1Min || 0),
+                deadline: BigInt(Math.floor(Date.now() / 1000) + 1800),
+              },
             ]
           : [
-              BigInt(tokenId),
-              userAddress as `0x${string}`,
-              // BigInt(amount0Max || MAX_UINT128),
-              // BigInt(amount1Max || MAX_UINT128),
+              {
+                tokenId: BigInt(tokenId),
+                recipient: userAddress as `0x${string}`,
+                amount0Max: BigInt(MAX_UINT128),
+                amount1Max: BigInt(MAX_UINT128),
+              },
             ];
 
       logger.info(`
@@ -135,7 +139,51 @@ class UniswapWithdrawalProvider extends ActionProvider<WalletProvider> {
       // Build transaction parameters
       const txParams = {
         address: contractAddress as `0x${string}`,
-        abi: nftManagerAbi,
+        abi: [
+          {
+            inputs: [
+              {
+                components: [
+                  { name: "tokenId", type: "uint256" },
+                  { name: "liquidity", type: "uint128" },
+                  { name: "amount0Min", type: "uint256" },
+                  { name: "amount1Min", type: "uint256" },
+                  { name: "deadline", type: "uint256" },
+                ],
+                name: "params",
+                type: "tuple",
+              },
+            ],
+            name: "decreaseLiquidity",
+            outputs: [
+              { name: "amount0", type: "uint256" },
+              { name: "amount1", type: "uint256" },
+            ],
+            stateMutability: "payable",
+            type: "function",
+          },
+          {
+            inputs: [
+              {
+                components: [
+                  { name: "tokenId", type: "uint256" },
+                  { name: "recipient", type: "address" },
+                  { name: "amount0Max", type: "uint128" },
+                  { name: "amount1Max", type: "uint128" },
+                ],
+                name: "params",
+                type: "tuple",
+              },
+            ],
+            name: "collect",
+            outputs: [
+              { name: "amount0", type: "uint256" },
+              { name: "amount1", type: "uint256" },
+            ],
+            stateMutability: "payable",
+            type: "function",
+          },
+        ],
         functionName: action,
         args: processedArgs,
         chain: baseSepolia,

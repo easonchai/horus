@@ -99,7 +99,7 @@ const revokeSchema = z.object({
  * Zod schema for checking token approvals
  */
 const checkApprovalsSchema = z.object({
-  tokenSymbol: z.enum(["USDC", "USDT", "WETH", "EIGEN"]),
+  tokenSymbol: z.enum(["USDC", "USDT", "WBTC", "EIGEN"]),
 });
 
 /**
