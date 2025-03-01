@@ -11,7 +11,6 @@ import dependencyGraphData from "../data/dependency_graph.json";
 import protocols from "../data/protocols.json";
 import tokens from "../data/tokens.json";
 import { z } from "zod";
-import { Wallet } from "../wallet";
 import { baseSepolia } from "viem/chains";
 
 // Initialize logger for this component
@@ -128,15 +127,49 @@ if (!UNISWAP.ROUTER) {
  * ABI for the Uniswap V3 Router
  */
 const ROUTER_ABI = [
-  "function exactInputSingle((address tokenIn, address tokenOut, uint24 fee, address recipient, uint256 amountIn, uint256 amountOutMinimum, uint160 sqrtPriceLimitX96)) external payable returns (uint256 amountOut)",
+  {
+    name: "exactInputSingle",
+    type: "function",
+    stateMutability: "payable",
+    inputs: [
+      {
+        type: "tuple",
+        components: [
+          { name: "tokenIn", type: "address" },
+          { name: "tokenOut", type: "address" },
+          { name: "fee", type: "uint24" },
+          { name: "recipient", type: "address" },
+          { name: "amountIn", type: "uint256" },
+          { name: "amountOutMinimum", type: "uint256" },
+          { name: "sqrtPriceLimitX96", type: "uint160" },
+        ],
+      },
+    ],
+    outputs: [{ type: "uint256", name: "amountOut" }],
+  },
 ];
 
 /**
  * ABI for ERC20 token functions
  */
 const ERC20_ABI = [
-  "function balanceOf(address account) view returns (uint256)",
-  "function approve(address spender, uint256 amount) returns (bool)",
+  {
+    name: "balanceOf",
+    type: "function",
+    stateMutability: "view",
+    inputs: [{ name: "account", type: "address" }],
+    outputs: [{ type: "uint256" }],
+  },
+  {
+    name: "approve",
+    type: "function",
+    stateMutability: "nonpayable",
+    inputs: [
+      { name: "spender", type: "address" },
+      { name: "amount", type: "uint256" },
+    ],
+    outputs: [{ type: "bool" }],
+  },
 ];
 
 /**
@@ -222,22 +255,26 @@ export class SwapProvider extends ActionProvider<WalletProvider> {
         `Approving ${UNISWAP.ROUTER} to spend ${amountInWei} ${fromToken}`
       );
 
-      // Approve the router to spend tokens
+      // Import the wallet
+      const { Wallet } = await import("../wallet");
       const wallet = new Wallet();
+
+      // Make sure wallet is initialized
+      wallet.initialize();
+
       const publicClient = wallet.publicClient;
       const walletClient = wallet.walletClient;
 
-      if (!walletClient) {
+      if (!walletClient || !publicClient) {
         throw new Error("Wallet client not initialized");
       }
 
-      logger.info("HERE!");
-      console.log({ walletClient });
+      // Approve the router to spend tokens
       const approvalTxHash = await walletClient.writeContract({
         address: tokenIn.address as `0x${string}`,
         abi: ERC20_ABI,
         functionName: "approve",
-        args: [UNISWAP.ROUTER, amountInWei.toString()],
+        args: [UNISWAP.ROUTER as `0x${string}`, amountInWei],
         chain: baseSepolia,
       } as any);
 
@@ -256,18 +293,18 @@ export class SwapProvider extends ActionProvider<WalletProvider> {
 
       // Step 3: Execute the swap
       // Calculate minimum amount out (with 0.5% slippage)
-      const amountOutMinimum = (amountInWei * BigInt(995)) / BigInt(1000);
+      // const amountOutMinimum = (amountInWei * BigInt(995)) / BigInt(1000);
 
-      // Prepare swap parameters
-      const swapParams = {
-        tokenIn: tokenIn.address,
-        tokenOut: tokenOut.address,
-        fee: UNISWAP.FEE_TIER,
-        recipient: userAddress,
-        amountIn: amountInWei.toString(),
-        amountOutMinimum: amountOutMinimum.toString(),
-        sqrtPriceLimitX96: BigInt(0).toString(), // No price limit
-      };
+      // Create the swap parameters as a tuple
+      const swapParams = [
+        tokenIn.address as `0x${string}`,
+        tokenOut.address as `0x${string}`,
+        UNISWAP.FEE_TIER,
+        userAddress as `0x${string}`,
+        amountInWei,
+        0, // TODO: Change
+        BigInt(0),
+      ];
 
       logger.debug(
         `Swap parameters: ${JSON.stringify(swapParams, (_, v) =>
@@ -275,12 +312,18 @@ export class SwapProvider extends ActionProvider<WalletProvider> {
         )}`
       );
 
+      const transactionCount = await publicClient.getTransactionCount({
+        address: userAddress,
+      });
+
       // Execute the swap transaction
       const swapTxHash = await walletClient.writeContract({
         address: UNISWAP.ROUTER as `0x${string}`,
         abi: ROUTER_ABI,
         functionName: "exactInputSingle",
         args: [swapParams],
+        chain: baseSepolia,
+        nonce: transactionCount,
       } as any);
 
       logger.info(`Swap transaction hash: ${swapTxHash}`);
