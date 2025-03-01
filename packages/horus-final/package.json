@@ -1,0 +1,25 @@
+{
+  "name": "horus-final",
+  "version": "1.0.0",
+  "description": "Horus DeFi Protection System",
+  "main": "dist/index.js",
+  "scripts": {
+    "build": "tsc",
+    "start": "node dist/index.js",
+    "dev": "ts-node src/index.ts"
+  },
+  "devDependencies": {
+    "@types/node": "^20.10.0",
+    "ts-node": "^10.9.1",
+    "typescript": "^5.2.2"
+  },
+  "dependencies": {
+    "@ai-sdk/openai": "^1.1.15",
+    "@coinbase/agentkit": "^0.2.3",
+    "ai": "^4.1.46",
+    "dotenv": "^16.4.5",
+    "viem": "^2.23.5",
+    "vitest": "^1.2.2",
+    "zod": "^3.24.2"
+  }
+}

@@ -1,0 +1,23 @@
+version: "3"
+services:
+  horus:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: horus-final
+    env_file:
+      - .env
+    volumes:
+      - ./src:/app/src
+    ports:
+      - "3001:3000"
+    environment:
+      - OPENAI_API_KEY=${OPENAI_API_KEY}
+      - PRIVATE_KEY=${PRIVATE_KEY}
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "wget", "--spider", "-q", "http://localhost:3000"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 30s

@@ -1,7 +1,7 @@
 import "reflect-metadata";
 import { describe, expect, it, vi } from "vitest";
 
-// Mock dependencies
+// Mock the dependencies
 vi.mock("../src/services/agent-service", () => {
   return {
     AgentService: vi.fn().mockImplementation(() => {
@@ -51,7 +51,7 @@ vi.mock("../src/services/wallet-service", () => {
   };
 });
 
-describe("Horus State Machine", () => {
+describe("Evaluate Signals Actor", () => {
   it("should pass a basic test", () => {
     expect(true).toBe(true);
   });

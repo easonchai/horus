@@ -1,22 +1,51 @@
+import {
+  ViemWalletProvider,
+  WalletProvider,
+  walletActionProvider,
+} from "@coinbase/agentkit";
 import { fromPromise } from "xstate";
 import { Action, SignalEvaluationResult, Threat } from "../models/types";
+import { evaluateTweetsActionProvider } from "../providers/tweet-evaluation.provider";
+import { actionRecommendationSchema, threatAnalysisSchema } from "../schemas";
 import { ActionComposer } from "../services/action-composer";
 import { ActionExecutor } from "../services/action-executor";
-import { SignalEvaluator } from "../services/signal-evaluator";
-import { ThreatProcessor } from "../services/threat-processor";
+import { AgentService } from "../services/agent-service";
+import { DependencyGraphService } from "../services/dependency-graph-service";
+import { WalletService } from "../services/wallet-service";
 import { HorusContext } from "./types";
 
-// Create instances of our services
-const signalEvaluator = new SignalEvaluator();
-const threatProcessor = new ThreatProcessor();
+// Setup wallet service for AgentKit integration
+const walletService = new WalletService();
+const walletClient = walletService.getWalletClient();
+const walletProvider: WalletProvider | undefined = walletClient
+  ? new ViemWalletProvider(walletClient)
+  : undefined;
+
+// Create instances of our services with proper configuration
+const agentService = new AgentService({
+  walletProvider: walletProvider as WalletProvider,
+  actionProviders: [evaluateTweetsActionProvider()],
+  systemMessage:
+    "You are a specialized security analyst for decentralized finance (DeFi) protocols analyzing tweets for security threats.",
+});
+
+// Create a dedicated service for action composition
+const actionCompositionAgent = new AgentService({
+  walletProvider: walletProvider as WalletProvider,
+  actionProviders: [walletActionProvider()],
+  systemMessage:
+    "You are a specialized security response coordinator for decentralized finance (DeFi) protocols. Your role is to recommend specific actions to mitigate detected security threats.",
+});
+
+// Create action composer and executor services
 const actionComposer = new ActionComposer();
 const actionExecutor = new ActionExecutor();
 
 /**
  * Actor for evaluating signals to detect threats
- * Enhanced with better error handling for edge cases
+ * Uses AgentService with AgentKit integration and structured data from generateObject
  */
-const evaluateSignalsActor = fromPromise(
+export const evaluateSignalsActor = fromPromise(
   async ({
     input,
   }: {
@@ -34,45 +63,118 @@ const evaluateSignalsActor = fromPromise(
       throw error;
     }
 
+    // Store the signal in a local variable to satisfy TypeScript
+    const signal = input.context.currentSignal;
+
     try {
-      const result = await signalEvaluator.evaluateSignal(
-        input.context.currentSignal
-      );
-
-      // Ensure result has expected structure to prevent state machine errors
-      if (result.isThreat === undefined) {
+      // Initialize AgentService if not already initialized
+      await agentService.initialize().catch((error) => {
         console.warn(
-          "[evaluateSignalsActor] Signal evaluation result missing isThreat property"
+          "[evaluateSignalsActor] Failed to initialize AgentService:",
+          error
         );
-        return { isThreat: false }; // Default to no threat if structure is invalid
-      }
+        // Continue execution - we'll use text-based analysis as fallback
+      });
 
-      // Handle edge case where isThreat is true but threat is undefined
-      if (result.isThreat && !result.threat) {
-        console.warn(
-          "[evaluateSignalsActor] Threat flagged but no threat details provided"
-        );
-        // Create a minimal threat object to prevent downstream errors
+      // Get dependency graph data for context
+      const dependencyGraph = DependencyGraphService.getDependencyGraph();
+      const dependencyGraphString = JSON.stringify(dependencyGraph, null, 2);
+
+      // Create the system prompt for security analysis
+      const systemPrompt =
+        "You are a specialized security analyst for decentralized finance (DeFi) protocols. Your task is to analyze tweets for security threats, exploits, or vulnerabilities that might affect blockchain protocols or tokens.";
+
+      // Create the user prompt with the signal and dependency graph
+      const prompt = `
+      Please analyze this tweet for potential security threats:
+      
+      "${signal.content}"
+      
+      Our project depends on these protocols and tokens:
+      ${dependencyGraphString}
+      
+      Determine if this tweet describes a real security threat to any blockchain protocol or token.
+      Focus particularly on threats that might affect tokens or protocols in our dependency graph.
+      
+      Respond with structured data indicating whether this is a threat and details if it is.
+      `;
+
+      // Use our generateObject method with the threatAnalysisSchema and options object
+      const result = await agentService.generateObject({
+        prompt,
+        schema: threatAnalysisSchema,
+        systemPrompt,
+        temperature: 0.1, // Lower temperature for more consistent results
+      });
+
+      console.log("[evaluateSignalsActor] Threat analysis result:", result);
+
+      // Convert the structured result to SignalEvaluationResult
+      if (result.isThreat && result.threatDetails) {
+        // Extract the threat details into our Threat model
+        const threat: Threat = {
+          description: result.threatDetails.description,
+          affectedProtocols: result.threatDetails.affectedProtocols,
+          affectedTokens: result.threatDetails.affectedTokens,
+          chain: result.threatDetails.chain,
+          severity: result.threatDetails.severity,
+        };
+
         return {
           isThreat: true,
-          threat: {
-            description: `Potential unnamed threat detected: ${input.context.currentSignal.content}`,
-            affectedProtocols: [],
-            affectedTokens: ["unknown"],
-            chain: "ethereum",
-            severity: "medium",
-          },
+          threat,
+          analysisText: JSON.stringify(result.threatDetails),
+        };
+      } else {
+        // No threat detected
+        return {
+          isThreat: false,
+          analysisText: "No security threat detected in the signal.",
         };
       }
-
-      console.log("[evaluateSignalsActor] Signal evaluation result:", result);
-      return result;
     } catch (error) {
       // Enhanced error logging
       console.error("[evaluateSignalsActor] Error evaluating signal:", error);
 
-      // Return a properly structured error result instead of throwing
-      // This allows the state machine to handle the error gracefully
+      // Fallback to basic keyword-based evaluation if AgentService fails
+      if (input.context.currentSignal) {
+        const threatKeywords = [
+          "vulnerability",
+          "exploit",
+          "attack",
+          "hacked",
+          "security",
+          "breach",
+          "risk",
+          "urgent",
+          "compromise",
+          "critical",
+          "emergency",
+        ];
+
+        const content = input.context.currentSignal.content.toLowerCase();
+        const isSimpleThreat = threatKeywords.some((keyword) =>
+          content.includes(keyword.toLowerCase())
+        );
+
+        if (isSimpleThreat) {
+          console.log(
+            "[evaluateSignalsActor] Threat detected via keyword fallback"
+          );
+          return {
+            isThreat: true,
+            threat: {
+              description: `Potential threat detected via keyword match: ${signal.content}`,
+              affectedProtocols: [],
+              affectedTokens: [],
+              chain: "ethereum",
+              severity: "medium",
+            },
+          };
+        }
+      }
+
+      // Return a properly structured error result
       return {
         isThreat: false,
         error: error instanceof Error ? error : new Error(String(error)),
@@ -83,12 +185,12 @@ const evaluateSignalsActor = fromPromise(
 
 /**
  * Actor for processing detected threats
- * Enhanced with better error handling
+ * Simplified to just pass through the detected threat without additional processing
  */
-const processThreatsActor = fromPromise(
+export const processThreatsActor = fromPromise(
   async ({ input }: { input: { context: HorusContext } }): Promise<Threat> => {
     console.log(
-      "[processThreatsActor] Processing threat:",
+      "[processThreatsActor] Passing through threat:",
       input.context.detectedThreat
     );
 
@@ -102,29 +204,16 @@ const processThreatsActor = fromPromise(
       throw error;
     }
 
-    try {
-      const result = await threatProcessor.processThreat(
-        input.context.detectedThreat
-      );
-      console.log("[processThreatsActor] Threat processing result:", result);
-      return result;
-    } catch (error) {
-      console.error("[processThreatsActor] Error processing threat:", error);
-
-      // In case of error, return the original threat rather than failing completely
-      console.warn(
-        "[processThreatsActor] Returning original threat due to processing error"
-      );
-      return input.context.detectedThreat;
-    }
+    // Simply return the detected threat without any processing
+    return input.context.detectedThreat;
   }
 );
 
 /**
  * Actor for composing actions based on detected threats
- * Enhanced with better error handling and fallback
+ * Enhanced to use AgentService for structured action recommendations
  */
-const composeActionsActor = fromPromise(
+export const composeActionsActor = fromPromise(
   async ({
     input,
   }: {
@@ -146,23 +235,93 @@ const composeActionsActor = fromPromise(
     }
 
     try {
-      const result = await actionComposer.composeActions(
-        input.context.detectedThreat
-      );
+      // Initialize ActionCompositionAgent if not already initialized
+      await actionCompositionAgent.initialize().catch((error) => {
+        console.warn(
+          "[composeActionsActor] Failed to initialize actionCompositionAgent:",
+          error
+        );
+        // Continue execution - we'll use fallback if needed
+      });
+
+      // Get dependency graph data for context
+      const dependencyGraph = DependencyGraphService.getDependencyGraph();
+      const dependencyGraphString = JSON.stringify(dependencyGraph, null, 2);
+
+      // Create the system prompt for action composition
+      const systemPrompt =
+        "You are a specialized security response coordinator for DeFi protocols. Your task is to recommend specific, actionable steps to mitigate security threats affecting blockchain protocols or tokens.";
+
+      // Use the imported schema instead of defining it inline
+      // Create the user prompt with the threat and dependency graph
+      const prompt = `
+      I need to respond to the following security threat:
+      
+      ${JSON.stringify(input.context.detectedThreat, null, 2)}
+      
+      Our project depends on these protocols and tokens:
+      ${dependencyGraphString}
+      
+      Based on this threat and our dependencies, recommend specific actions that should be taken immediately.
+      Focus on concrete, actionable steps that will protect our assets and mitigate the risk.
+      
+      For each action, return:
+      1. actionType: Must be one of "swap", "withdraw", or "revoke"
+      2. protocol: The name of the affected protocol
+      3. token: The token symbol involved in the action
+      4. description: A detailed explanation of what this action will do
+      5. priority: How urgent this action is ("low", "medium", "high", "critical")
+      6. params: A map of parameters needed (amounts, destinations, etc.)
+
+      choose the best tool for the job. use multiple tools if needed.
+      `;
+
+      // Use generateObject method with the imported actionRecommendationSchema
+      const result = await actionCompositionAgent.generateObject({
+        prompt,
+        schema: actionRecommendationSchema,
+        systemPrompt,
+        temperature: 0.2, // Low temperature for consistent, practical recommendations
+      });
 
       console.log("[composeActionsActor] Action composition result:", result);
 
       // Handle empty actions result
-      if (!result || result.length === 0) {
+      if (!result || !result.actions || result.actions.length === 0) {
         console.warn("[composeActionsActor] No actions generated for threat");
         return [];
       }
 
-      return result;
+      // Transform the result into Action objects with the correct structure
+      const actions: Action[] = result.actions.map((action) => ({
+        type: action.actionType,
+        protocol: action.protocol,
+        token: action.token,
+        params: action.params || {},
+      }));
+
+      return actions;
     } catch (error) {
       console.error("[composeActionsActor] Error composing actions:", error);
 
-      // Return empty array instead of throwing, allowing state machine to continue
+      // Fallback to using original actionComposer if agent-based approach fails
+      try {
+        console.warn("[composeActionsActor] Falling back to actionComposer");
+        const fallbackActions = await actionComposer.composeActions(
+          input.context.detectedThreat
+        );
+
+        if (fallbackActions && fallbackActions.length > 0) {
+          return fallbackActions;
+        }
+      } catch (fallbackError) {
+        console.error(
+          "[composeActionsActor] Fallback also failed:",
+          fallbackError
+        );
+      }
+
+      // Return empty array if both approaches fail, allowing state machine to continue
       return [];
     }
   }
@@ -170,13 +329,14 @@ const composeActionsActor = fromPromise(
 
 /**
  * Actor for executing composed actions
- * Enhanced with better error handling
+ * Enhanced to execute multiple actions with individual action tracking
  */
-const executeActionsActor = fromPromise(
+export const executeActionsActor = fromPromise(
   async ({ input }: { input: { context: HorusContext } }) => {
     console.log(
-      "[executeActionsActor] Executing actions:",
-      input.context.actionPlan
+      "[executeActionsActor] Executing actions plan with",
+      input.context.actionPlan?.length || 0,
+      "actions:"
     );
 
     // Input validation with helpful error message
@@ -189,21 +349,55 @@ const executeActionsActor = fromPromise(
       throw error;
     }
 
+    // Log each action to be executed with an index
+    input.context.actionPlan.forEach((action, index) => {
+      console.log(
+        `[executeActionsActor] Action ${index + 1}/${
+          input.context.actionPlan.length
+        }:`,
+        `${action.type} on ${action.protocol} for ${action.token}`,
+        action.params
+      );
+    });
+
     try {
-      const result = await actionExecutor.executeActions(
+      // Execute all actions at once via the actionExecutor service
+      console.log("[executeActionsActor] Executing batch of actions...");
+      const results = await actionExecutor.executeActions(
         input.context.actionPlan
       );
-      console.log("[executeActionsActor] Action execution result:", result);
-      return result;
+
+      // Log summary of execution results
+      const successCount = results.filter((r) => r.status === "success").length;
+      console.log(
+        `[executeActionsActor] Execution complete: ${successCount}/${results.length} actions succeeded`
+      );
+
+      // Log individual results
+      results.forEach((result, index) => {
+        const status = result.status === "success" ? "✅" : "❌";
+        console.log(
+          `[executeActionsActor] ${status} Action ${index + 1} (${
+            result.action.type
+          }): ${
+            result.status === "success"
+              ? `Success, txHash: ${result.txHash}`
+              : `Failed: ${result.error || "Unknown error"}`
+          }`
+        );
+      });
+
+      return results;
     } catch (error) {
       console.error("[executeActionsActor] Error executing actions:", error);
 
-      // Return partial results if possible
+      // Return partial results with detailed error information for each action
       return input.context.actionPlan.map((action) => ({
-        success: false,
-        txHash: "",
         action,
+        status: "failed" as const,
+        txHash: "",
         error: error instanceof Error ? error.message : String(error),
+        timestamp: Date.now(),
       }));
     }
   }

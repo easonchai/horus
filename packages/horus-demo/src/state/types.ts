@@ -8,6 +8,11 @@ export interface HorusContext {
   actionPlan: Action[];
   executionResults: ActionExecutionResult[];
   error?: Error;
+  dependencyGraph?: {
+    tokens: string[];
+    protocols: string[];
+  };
+  analysisText?: string;
 }
 
 export type HorusEvent =
