@@ -28,7 +28,8 @@ const signalProcessor = new SignalProcessor(async (signal: Signal) => {
 
 // Start processing signals
 try {
-  signalProcessor.start(5000); // Poll every 5 seconds
+  // Start with initial delay of 5 seconds, will then use 30-second delays between signals
+  signalProcessor.start(20000);
   logger.info("Signal processor started successfully");
 } catch (error) {
   logger.error("Failed to start signal processor:", error);
