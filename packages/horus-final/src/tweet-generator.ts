@@ -18,7 +18,6 @@ export class TwitterPoller {
   private callback: (signal: Signal) => Promise<void>;
   private interval: NodeJS.Timeout | null = null;
   private currentIndex = 0;
-  private tweetQueue: Tweet[] = [];
   private isProcessing = false;
 
   /**
@@ -31,18 +30,15 @@ export class TwitterPoller {
   }
 
   /**
-   * Starts polling for tweets at the specified interval
-   * @param intervalMs Interval in milliseconds between tweet polls
+   * Starts polling for tweets with a 30-second delay between processing
+   * @param intervalMs Initial delay before starting (not used for subsequent processing)
    */
-  start(intervalMs = 10000) {
-    logger.info(`Starting TwitterPoller with interval of ${intervalMs}ms`);
+  start(intervalMs = 5000) {
+    logger.info(`Starting TwitterPoller with 30-second delay between signals`);
 
-    // Initial processing to start the queue
-    this.queueNextTweet();
-
-    // Set up interval to add tweets to the queue
-    this.interval = setInterval(() => {
-      this.queueNextTweet();
+    // Initial delay before starting
+    this.interval = setTimeout(() => {
+      this.processNextTweet();
     }, intervalMs);
   }
 
@@ -51,64 +47,32 @@ export class TwitterPoller {
    */
   stop() {
     if (this.interval) {
-      clearInterval(this.interval);
+      clearTimeout(this.interval);
       this.interval = null;
       logger.info("TwitterPoller stopped");
     }
   }
 
   /**
-   * Queues the next tweet for processing
+   * Processes the next tweet and schedules the next one after 30 seconds
    * @private
    */
-  private queueNextTweet() {
-    if (this.currentIndex < mockTweets.length) {
-      const tweet = mockTweets[this.currentIndex++];
-      logger.debug(
-        `Queuing tweet ${tweet.id}: "${tweet.content.substring(0, 30)}..."`
-      );
-
-      this.tweetQueue.push(tweet);
-      logger.info(
-        `Tweet ${tweet.id} added to queue. Queue size: ${this.tweetQueue.length}`
-      );
-
-      // Process the queue if not already processing
-      if (!this.isProcessing) {
-        this.processQueue();
-      }
-    } else {
-      logger.info("All tweets processed, resetting index to start over");
-      this.currentIndex = 0; // Reset to start over when all tweets are processed
-
-      // Queue the first tweet again after reset
-      if (mockTweets.length > 0) {
-        const tweet = mockTweets[this.currentIndex++];
-        this.tweetQueue.push(tweet);
-
-        // Process the queue if not already processing
-        if (!this.isProcessing) {
-          this.processQueue();
-        }
-      }
-    }
-  }
-
-  /**
-   * Processes tweets in the queue sequentially
-   * @private
-   */
-  private async processQueue() {
-    if (this.tweetQueue.length === 0 || this.isProcessing) {
+  private async processNextTweet() {
+    if (this.isProcessing) {
       return;
     }
 
     this.isProcessing = true;
 
     try {
-      const tweet = this.tweetQueue.shift()!;
+      if (this.currentIndex >= mockTweets.length) {
+        logger.info("All tweets processed, resetting index to start over");
+        this.currentIndex = 0;
+      }
+
+      const tweet = mockTweets[this.currentIndex++];
       logger.info(
-        `Processing tweet ${tweet.id} from queue. Remaining in queue: ${this.tweetQueue.length}`
+        `Processing tweet ${tweet.id}: "${tweet.content.substring(0, 30)}..."`
       );
 
       const signal: Signal = {
@@ -119,7 +83,7 @@ export class TwitterPoller {
 
       logger.debug(`Sending tweet ${tweet.id} as signal to callback`);
 
-      // Wait for the callback to complete before processing the next tweet
+      // Process the current tweet
       await this.callback(signal);
 
       logger.info(`Finished processing tweet ${tweet.id}`);
@@ -128,12 +92,11 @@ export class TwitterPoller {
     } finally {
       this.isProcessing = false;
 
-      // Process the next tweet in the queue if any
-      if (this.tweetQueue.length > 0) {
-        this.processQueue();
-      } else {
-        logger.debug("Queue is empty, waiting for new tweets");
-      }
+      // Schedule the next tweet processing after a 30-second delay
+      logger.info("Waiting 30 seconds before processing the next signal...");
+      this.interval = setTimeout(() => {
+        this.processNextTweet();
+      }, 30000); // 30 seconds
     }
   }
 }
