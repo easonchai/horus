@@ -39,28 +39,49 @@ horusActor.subscribe((state) => {
   }
 });
 
-// Start the Horus actor
-horusActor.start();
+// Start the Horus actor with error handling
+try {
+  horusActor.start();
+  console.log("Horus actor started successfully");
+} catch (error) {
+  console.error("Failed to start Horus actor:", error);
+  // Continue execution even if there's an error with the actor
+}
 
 // Create Twitter poller
 const twitterPoller = new TwitterPoller((signal) => {
   console.log(`Received signal from Twitter: "${signal.content}"`);
 
   // Send the signal to the Horus actor
-  horusActor.send({
-    type: "SIGNAL_RECEIVED",
-    signal,
-  });
+  try {
+    horusActor.send({
+      type: "SIGNAL_RECEIVED",
+      signal,
+    });
+  } catch (error) {
+    console.error("Error sending signal to Horus actor:", error);
+  }
 });
 
 // Start polling for tweets
-twitterPoller.start(5000); // Poll every 5 seconds
+try {
+  twitterPoller.start(5000); // Poll every 5 seconds
+  console.log("Twitter poller started successfully");
+} catch (error) {
+  console.error("Failed to start Twitter poller:", error);
+}
 
 // Handle application shutdown
 process.on("SIGINT", () => {
   console.log("Shutting down Horus...");
   twitterPoller.stop();
   process.exit(0);
+});
+
+// Handle uncaught exceptions to prevent app crash
+process.on("uncaughtException", (error) => {
+  console.error("Uncaught exception:", error);
+  // Keep the application running despite the error
 });
 
 console.log("Horus is now monitoring for security threats...");
