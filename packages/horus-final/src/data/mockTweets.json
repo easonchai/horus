@@ -33,5 +33,80 @@
     "id": "tweet7",
     "content": "Anyone heading to ETHDenver next month? Looking for hackathon teammates.",
     "timestamp": 1677513960000
+  },
+  {
+    "id": "tweet8",
+    "content": "URGENT: Beefy Finance vaults experiencing unusual withdrawal patterns. Investigating potential security breach.",
+    "timestamp": 1677514020000
+  },
+  {
+    "id": "tweet9",
+    "content": "UPDATE: The Uniswap V3 vulnerability has been confirmed. Team working on emergency fix. Revoke approvals now!",
+    "timestamp": 1677514080000
+  },
+  {
+    "id": "tweet10",
+    "content": "False alarm: Previous reports about Aave protocol were incorrect. All systems operating normally.",
+    "timestamp": 1677514140000
+  },
+  {
+    "id": "tweet11",
+    "content": "SECURITY ALERT: New smart contract exploit targeting ERC-4626 vaults. Check if your assets are affected.",
+    "timestamp": 1677514200000
+  },
+  {
+    "id": "tweet12",
+    "content": "Just deployed my first smart contract on Base. The developer experience is amazing!",
+    "timestamp": 1677514260000
+  },
+  {
+    "id": "tweet13",
+    "content": "ALERT: Curve Finance front-end compromised. DO NOT interact with curve.fi until further notice.",
+    "timestamp": 1677514320000
+  },
+  {
+    "id": "tweet14",
+    "content": "What's your favorite stablecoin? USDC, USDT, or DAI? Trying to decide which to use for my new DeFi project.",
+    "timestamp": 1677514380000
+  },
+  {
+    "id": "tweet15",
+    "content": "UPDATE: Beefy Finance confirms no security breach. Unusual activity was due to a large institutional investor.",
+    "timestamp": 1677514440000
+  },
+  {
+    "id": "tweet16",
+    "content": "ALERT: Sophisticated phishing emails impersonating Coinbase support are circulating. Never share your seed phrase!",
+    "timestamp": 1677514500000
+  },
+  {
+    "id": "tweet17",
+    "content": "Uniswap V4 announcement coming next week! Get ready for revolutionary new features.",
+    "timestamp": 1677514560000
+  },
+  {
+    "id": "tweet18",
+    "content": "CRITICAL: Multiple DeFi protocols affected by zero-day vulnerability in OpenZeppelin contracts. Emergency audit underway.",
+    "timestamp": 1677514620000
+  },
+  {
+    "id": "tweet19",
+    "content": "Gas prices are insane today! Anyone else waiting for them to drop before making transactions?",
+    "timestamp": 1677514680000
+  },
+  {
+    "id": "tweet20",
+    "content": "UPDATE: Curve Finance front-end issue resolved. Safe to use again, but always double-check contract addresses.",
+    "timestamp": 1677514740000
+  },
+  {
+    "id": "tweet21",
+    "content": "ALERT: Malicious token approval scam targeting Uniswap users. Check your token approvals and revoke any suspicious ones.",
+    "timestamp": 1677514800000
+  },
+  {
+    "id": "tweet22",
+    "content": "Just discovered a new yield farming strategy that's giving me 30% APY with relatively low risk!",
+    "timestamp": 1677514860000
   }
 ]

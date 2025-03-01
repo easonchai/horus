@@ -1,38 +1,18 @@
+import mockTweetsData from "./data/mockTweets.json";
 import { Signal } from "./types";
+import { getLogger } from "./utils/logger";
+
+// Initialize logger for this component
+const logger = getLogger("TwitterPoller");
 
 export interface Tweet {
+  id: string;
   content: string;
   timestamp: number;
 }
 
-// Mock tweets for testing
-export const mockTweets: Tweet[] = [
-  {
-    content:
-      "URGENT: Security vulnerability found in Uniswap V3 smart contract. Users advised to withdraw immediately.",
-    timestamp: Date.now() - 3600000, // 1 hour ago
-  },
-  {
-    content:
-      "Breaking: Aave protocol pausing withdrawals due to suspicious activity.",
-    timestamp: Date.now() - 2400000, // 40 minutes ago
-  },
-  {
-    content:
-      "Alert: Potential exploit discovered in Curve Finance. Investigating.",
-    timestamp: Date.now() - 1800000, // 30 minutes ago
-  },
-  {
-    content:
-      "False alarm: Previous reports about Uniswap were incorrect. No action needed.",
-    timestamp: Date.now() - 1200000, // 20 minutes ago
-  },
-  {
-    content:
-      "Security Advisory: New phishing attacks targeting DeFi users. Be vigilant.",
-    timestamp: Date.now() - 600000, // 10 minutes ago
-  },
-];
+// Load tweets from the JSON file
+export const mockTweets: Tweet[] = mockTweetsData as Tweet[];
 
 export class TwitterPoller {
   private callback: (signal: Signal) => void;
@@ -41,19 +21,29 @@ export class TwitterPoller {
 
   constructor(callback: (signal: Signal) => void) {
     this.callback = callback;
+    logger.info(`TwitterPoller initialized with ${mockTweets.length} tweets`);
   }
 
   start(intervalMs = 10000) {
+    logger.info(`Starting TwitterPoller with interval of ${intervalMs}ms`);
     this.interval = setInterval(() => {
-      const tweets = mockTweets;
-      if (this.currentIndex < tweets.length) {
-        const tweet = tweets[this.currentIndex++];
+      if (this.currentIndex < mockTweets.length) {
+        const tweet = mockTweets[this.currentIndex++];
+        logger.debug(
+          `Processing tweet ${tweet.id}: "${tweet.content.substring(0, 30)}..."`
+        );
+
         const signal: Signal = {
           source: "twitter",
           content: tweet.content,
           timestamp: tweet.timestamp,
         };
+
         this.callback(signal);
+        logger.info(`Sent tweet ${tweet.id} as signal to callback`);
+      } else {
+        logger.info("All tweets processed, resetting index to start over");
+        this.currentIndex = 0; // Reset to start over when all tweets are processed
       }
     }, intervalMs);
   }
@@ -62,6 +52,7 @@ export class TwitterPoller {
     if (this.interval) {
       clearInterval(this.interval);
       this.interval = null;
+      logger.info("TwitterPoller stopped");
     }
   }
 }
