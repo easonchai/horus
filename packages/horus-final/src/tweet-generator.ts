@@ -1,4 +1,4 @@
-import { Signal } from "../models/types";
+import { Signal } from "./types";
 
 export interface Tweet {
   content: string;
