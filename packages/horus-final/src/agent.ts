@@ -9,6 +9,7 @@
 import { openai } from "@ai-sdk/openai";
 import { generateText } from "ai";
 import { agentKit, getAgent } from "./agentKit";
+import dependencyGraphData from "./data/dependency_graph.json";
 import { Signal } from "./types";
 import { getLogger } from "./utils/logger";
 
@@ -83,14 +84,28 @@ export class Agent {
     await this.initialize();
 
     const prompt = `
-      Please analyze the following message for potential security threats to DeFi protocols:
+      Analyze the following signal for potential security threats to DeFi protocols:
 
+      ## SIGNAL DETAILS
       SOURCE: ${signal.source}
       CONTENT: ${signal.content}
       TIMESTAMP: ${new Date(signal.timestamp).toISOString()}
 
-      Determine if this message indicates a security threat, what protocols might be affected,
-      and what actions should be taken to mitigate any risks.
+      ## DEPENDENCY GRAPH
+      ${JSON.stringify(dependencyGraphData, null, 2)}
+
+      ## YOUR TASK
+      1. Analyze this signal to determine if it represents a legitimate security threat to any protocols or tokens in the dependency graph
+      2. If a threat is detected:
+        - Identify which specific protocol or token is compromised
+        - Determine which positions in the dependency graph are exposed to this threat
+        - Outline the exact sequence of actions needed to protect these positions
+        - Execute the necessary tool calls (swap/revoke/withdraw) in the correct order
+      3. If no threat is detected or if no exposure exists in the dependency graph:
+        - Explain why no action is needed
+        - Take no further action
+
+      Provide your analysis step-by-step and execute any necessary protective actions using the available tools.
     `;
 
     logger.debug("Generated signal analysis prompt");
@@ -216,7 +231,8 @@ export class Agent {
 
 // Create and export a default agent instance
 logger.info("Creating default Agent instance");
-export const agent = new Agent({systemMessage:`
+export const agent = new Agent({
+  systemMessage: `
   You are Horus, an advanced AI security agent for DeFi protocols. Your primary function is to monitor signals (such as tweets) for potential security threats to blockchain protocols and automatically execute protective actions when necessary.
 
   ## YOUR CORE RESPONSIBILITIES
@@ -310,4 +326,5 @@ export const agent = new Agent({systemMessage:`
      - Exit from positions dependent on USDC
 
   Remember that your primary mission is to protect user assets from security threats while avoiding unnecessary actions for non-threats. Be decisive when real threats emerge and take no action when the signal doesn't indicate a legitimate security concern.
-  `});
+  `,
+});
